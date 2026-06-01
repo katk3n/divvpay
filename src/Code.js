@@ -80,6 +80,8 @@ function getSpreadsheet(spreadsheetId) {
 
 /**
  * Initializes the database tables if they do not exist in the spreadsheet.
+ * Also performs automatic self-healing migration from name-based reference to ID-based reference
+ * if an older version of the spreadsheet is detected.
  */
 function initializeDatabase(spreadsheetId) {
   var ss = getSpreadsheet(spreadsheetId);
@@ -92,11 +94,84 @@ function initializeDatabase(spreadsheetId) {
   var memberSheet = ss.getSheetByName(SHEETS.MEMBERS);
   if (!memberSheet) {
     memberSheet = ss.insertSheet(SHEETS.MEMBERS);
-    memberSheet.appendRow(['name', 'email', 'color']);
+    memberSheet.appendRow(['id', 'name', 'email', 'color']);
     
-    // Seed default members: active user and one friend
-    memberSheet.appendRow([activeName, activeEmail || '', '#6366f1']); // Theme Indigo
-    memberSheet.appendRow(['友人A', '', '#ec4899']); // Pink
+    // Seed default members: active user and one friend with static IDs
+    memberSheet.appendRow(['mem_1', activeName, activeEmail || '', '#6366f1']); // Theme Indigo
+    memberSheet.appendRow(['mem_2', '友人A', '', '#ec4899']); // Pink
+  } else {
+    // Self-healing migration: Convert older name-based member sheets to ID-based
+    var headers = memberSheet.getRange(1, 1, 1, memberSheet.getLastColumn()).getValues()[0];
+    if (headers.indexOf('id') === -1) {
+      memberSheet.insertColumnBefore(1);
+      memberSheet.getRange(1, 1).setValue('id');
+      
+      var numRows = memberSheet.getLastRow();
+      var nameMap = {};
+      if (numRows > 1) {
+        for (var r = 2; r <= numRows; r++) {
+          var memberId = 'mem_' + (r - 1);
+          memberSheet.getRange(r, 1).setValue(memberId);
+          var name = memberSheet.getRange(r, 2).getValue(); // Name shifts to column 2
+          if (name) {
+            nameMap[name] = memberId;
+          }
+        }
+      }
+      
+      // Migrate Categories split_rules
+      var categorySheet = ss.getSheetByName(SHEETS.CATEGORIES);
+      if (categorySheet) {
+        var catValues = categorySheet.getDataRange().getValues();
+        var splitColIdx = catValues[0].indexOf('split_rules');
+        if (splitColIdx !== -1) {
+          for (var i = 1; i < catValues.length; i++) {
+            var rulesStr = catValues[i][splitColIdx];
+            if (rulesStr) {
+              try {
+                var rules = JSON.parse(rulesStr);
+                var newRules = {};
+                Object.keys(rules).forEach(function(key) {
+                  var mappedKey = nameMap[key] || key;
+                  newRules[mappedKey] = rules[key];
+                });
+                categorySheet.getRange(i + 1, splitColIdx + 1).setValue(JSON.stringify(newRules));
+              } catch(e) {}
+            }
+          }
+        }
+      }
+      
+      // Migrate Expenses payer
+      var expenseSheet = ss.getSheetByName(SHEETS.EXPENSES);
+      if (expenseSheet) {
+        var expValues = expenseSheet.getDataRange().getValues();
+        var payerColIdx = expValues[0].indexOf('payer');
+        if (payerColIdx !== -1) {
+          for (var i = 1; i < expValues.length; i++) {
+            var oldPayerName = expValues[i][payerColIdx];
+            if (oldPayerName && nameMap[oldPayerName]) {
+              expenseSheet.getRange(i + 1, payerColIdx + 1).setValue(nameMap[oldPayerName]);
+            }
+          }
+        }
+      }
+      
+      // Migrate Settlements settler
+      var settlementSheet = ss.getSheetByName(SHEETS.SETTLEMENTS);
+      if (settlementSheet) {
+        var setValues = settlementSheet.getDataRange().getValues();
+        var settlerColIdx = setValues[0].indexOf('settler');
+        if (settlerColIdx !== -1) {
+          for (var i = 1; i < setValues.length; i++) {
+            var oldSettlerName = setValues[i][settlerColIdx];
+            if (oldSettlerName && nameMap[oldSettlerName]) {
+              settlementSheet.getRange(i + 1, settlerColIdx + 1).setValue(nameMap[oldSettlerName]);
+            }
+          }
+        }
+      }
+    }
   }
   
   // 2. Categories sheet (Without savings reimbursement feature)
@@ -105,10 +180,10 @@ function initializeDatabase(spreadsheetId) {
     categorySheet = ss.insertSheet(SHEETS.CATEGORIES);
     categorySheet.appendRow(['id', 'name', 'emoji', 'split_rules']);
     
-    // Seed default categories with equal split rules for 2 default members
+    // Seed default categories with equal split rules for 2 default member IDs
     var defaultSplit = {};
-    defaultSplit[activeName] = 50;
-    defaultSplit['友人A'] = 50;
+    defaultSplit['mem_1'] = 50;
+    defaultSplit['mem_2'] = 50;
     var defaultSplitJson = JSON.stringify(defaultSplit);
     
     categorySheet.appendRow(['cat_1', '割り勘（均等）', '👥', defaultSplitJson]);
@@ -202,6 +277,7 @@ function getInitialData(spreadsheetId) {
     
     var displayName = activeMember ? activeMember.name : (email ? email.split('@')[0] : '自分');
     var displayColor = activeMember ? activeMember.color : '#6366f1';
+    var displayId = activeMember ? activeMember.id : 'mem_1';
     
     var ss = getSpreadsheet(spreadsheetId);
     
@@ -211,6 +287,7 @@ function getInitialData(spreadsheetId) {
         email: email,
         name: displayName,
         color: displayColor,
+        id: displayId,
         isAdmin: true
       },
       expenses: getSheetData(spreadsheetId, SHEETS.EXPENSES),
@@ -324,12 +401,12 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
     
     var balances = {};
     members.forEach(function(m) {
-      balances[m.name] = 0;
+      balances[m.id] = 0;
     });
     
     unsettled.forEach(function(e) {
       var amt = Number(e.amount);
-      var payer = e.payer;
+      var payer = e.payer; // Now represents member ID
       
       // Find category by ID or Name
       var cat = categories.find(function(c) {
@@ -340,7 +417,7 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
       if (!cat) {
         // Fallback: Equal split if category not found
         members.forEach(function(m) {
-          ratios[m.name] = 100 / members.length;
+          ratios[m.id] = 100 / members.length;
         });
       } else {
         // Normal split rule
@@ -349,7 +426,7 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
         } catch(err) {
           // equal split fallback
           members.forEach(function(m) {
-            ratios[m.name] = 100 / members.length;
+            ratios[m.id] = 100 / members.length;
           });
         }
       }
@@ -361,10 +438,10 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
       
       // Deduct each member's share
       members.forEach(function(m) {
-        var ratio = Number(ratios[m.name]) || 0;
+        var ratio = Number(ratios[m.id]) || 0;
         var share = amt * (ratio / 100);
-        if (balances[m.name] !== undefined) {
-          balances[m.name] -= share;
+        if (balances[m.id] !== undefined) {
+          balances[m.id] -= share;
         }
       });
     });
@@ -376,11 +453,11 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
     var creditors = [];
     
     members.forEach(function(m) {
-      var bal = Math.round(balances[m.name]);
+      var bal = Math.round(balances[m.id]);
       if (bal < -0.1) {
-        debtors.push({ name: m.name, amount: -bal });
+        debtors.push({ id: m.id, amount: -bal });
       } else if (bal > 0.1) {
-        creditors.push({ name: m.name, amount: bal });
+        creditors.push({ id: m.id, amount: bal });
       }
     });
     
@@ -393,7 +470,12 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
       
       var transAmt = Math.min(debtor.amount, creditor.amount);
       if (transAmt > 0.1) {
-        transfers.push(debtor.name + ' ➔ ' + creditor.name + ' : ' + Math.round(transAmt).toLocaleString() + '円');
+        var debtorMember = members.find(function(m) { return m.id === debtor.id; });
+        var creditorMember = members.find(function(m) { return m.id === creditor.id; });
+        var dName = debtorMember ? debtorMember.name : debtor.id;
+        var cName = creditorMember ? creditorMember.name : creditor.id;
+        
+        transfers.push(dName + ' ➔ ' + cName + ' : ' + Math.round(transAmt).toLocaleString() + '円');
       }
       
       debtor.amount -= transAmt;
@@ -422,10 +504,16 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
     var settlementId = 'set_' + new Date().getTime();
     var nowStr = new Date().toISOString();
     
+    var settlerDisplayName = settlerName || 'システム';
+    var settlerMember = members.find(function(m) { return m.id === settlerName; });
+    if (settlerMember) {
+      settlerDisplayName = settlerMember.name;
+    }
+    
     settlementSheet.appendRow([
       settlementId,
       new Date().toLocaleDateString('ja-JP'),
-      sanitizeTextInput(settlerName || 'システム'),
+      sanitizeTextInput(settlerDisplayName),
       totalAmount,
       sanitizeTextInput(detailsText),
       nowStr
@@ -535,7 +623,7 @@ function deleteCategory(spreadsheetId, id) {
 }
 
 /**
- * Save all member settings.
+ * Save all member settings including their unique ID.
  */
 function saveMemberSettings(spreadsheetId, members) {
   try {
@@ -546,12 +634,13 @@ function saveMemberSettings(spreadsheetId, members) {
       sheet = ss.getSheetByName(SHEETS.MEMBERS);
     }
     
-    // Clear and rewrite sheet contents
+    // Clear and rewrite sheet contents with ID column
     sheet.clearContents();
-    sheet.getRange(1, 1, 1, 3).setValues([['name', 'email', 'color']]);
+    sheet.getRange(1, 1, 1, 4).setValues([['id', 'name', 'email', 'color']]);
     
     for (var i = 0; i < members.length; i++) {
       sheet.appendRow([
+        sanitizeTextInput(members[i].id || ('mem_' + (new Date().getTime() + i))),
         sanitizeTextInput(members[i].name),
         sanitizeTextInput(members[i].email || ''),
         members[i].color || '#6366f1'

@@ -136,8 +136,8 @@ function redirectParent(id) {
 
 ### 2. Auto-Healing Dynamic Memberships
 If a member is added, deleted, or renamed:
-- **Rename**: You must propagate the name change across all `split_rules` JSON definitions in the `categories` sheet.
-- **Delete**: Recalculate remaining split ratios to sum exactly to 100% (auto-heal) so calculations do not break.
+- **Rename**: You must propagate the name change across all `split_rules` JSON definitions in the `categories` sheet, all past transactions `payer` column in `expenses`, and settlement settler names/details inside `settlements`. This is handled atomically via the server-side `renameMember` API to ensure 100% data consistency.
+- **Delete**: Recalculate remaining split ratios to sum exactly to 100% (auto-heal) so calculations do not break. To prevent database orphaned references, the application strictly blocks deleting any member who has unsettled paid expenses.
 - **Savings Feature**: Do **NOT** implement child savings or reimbursement features (explicitly requested to be omitted).
 
 ### 3. Glassmorphism Design

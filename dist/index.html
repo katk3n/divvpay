@@ -1503,22 +1503,22 @@ const localBackendMock = {
 
     if (!localStorage.getItem(memKey)) {
       localStorage.setItem(memKey, JSON.stringify([
-        { name: '自分', email: 'me@example.com', color: '#6366f1' },
-        { name: '友人A', email: 'friend.a@example.com', color: '#ec4899' },
-        { name: '友人B', email: '', color: '#10b981' }
+        { id: 'mem_1', name: '自分', email: 'me@example.com', color: '#6366f1' },
+        { id: 'mem_2', name: '友人A', email: 'friend.a@example.com', color: '#ec4899' },
+        { id: 'mem_3', name: '友人B', email: '', color: '#10b981' }
       ]));
     }
     if (!localStorage.getItem(catKey)) {
       localStorage.setItem(catKey, JSON.stringify([
-        { id: 'cat_1', name: '割り勘（均等）', emoji: '👥', split_rules: '{"自分":34,"友人A":33,"友人B":33}' },
-        { id: 'cat_2', name: '食事代', emoji: '🍔', split_rules: '{"自分":50,"友人A":50,"友人B":0}' },
-        { id: 'cat_3', name: '交通費', emoji: '🚕', split_rules: '{"自分":0,"友人A":100,"友人B":0}' }
+        { id: 'cat_1', name: '割り勘（均等）', emoji: '👥', split_rules: '{"mem_1":34,"mem_2":33,"mem_3":33}' },
+        { id: 'cat_2', name: '食事代', emoji: '🍔', split_rules: '{"mem_1":50,"mem_2":50,"mem_3":0}' },
+        { id: 'cat_3', name: '交通費', emoji: '🚕', split_rules: '{"mem_1":0,"mem_2":100,"mem_3":0}' }
       ]));
     }
     if (!localStorage.getItem(expKey)) {
       localStorage.setItem(expKey, JSON.stringify([
-        { id: 'exp_1', date: new Date().toISOString().split('T')[0], payer: '自分', amount: 4500, category: 'cat_1', description: 'みんなのランチ代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() },
-        { id: 'exp_2', date: new Date().toISOString().split('T')[0], payer: '友人A', amount: 3000, category: 'cat_2', description: 'カフェ・お茶代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() }
+        { id: 'exp_1', date: new Date().toISOString().split('T')[0], payer: 'mem_1', amount: 4500, category: 'cat_1', description: 'みんなのランチ代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() },
+        { id: 'exp_2', date: new Date().toISOString().split('T')[0], payer: 'mem_2', amount: 3000, category: 'cat_2', description: 'カフェ・お茶代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() }
       ]));
     }
     if (!localStorage.getItem(setKey)) {
@@ -1527,7 +1527,7 @@ const localBackendMock = {
 
     const res = {
       success: true,
-      user: { email: 'me@example.com', name: '自分', color: '#6366f1', isAdmin: true },
+      user: { id: 'mem_1', email: 'me@example.com', name: '自分', color: '#6366f1', isAdmin: true },
       expenses: JSON.parse(localStorage.getItem(expKey)),
       settlements: JSON.parse(localStorage.getItem(setKey)),
       members: JSON.parse(localStorage.getItem(memKey)),
@@ -1809,6 +1809,16 @@ function createNewSheetFromOnboarding() {
   }).createNewSpreadsheet(name);
 }
 
+function getMemberName(id) {
+  const m = state.members.find(member => member.id === id);
+  return m ? m.name : (id || '削除されたユーザー');
+}
+
+function getMemberColor(id) {
+  const m = state.members.find(member => member.id === id);
+  return m ? m.color : '#6366f1';
+}
+
 function resetToOnboarding() {
   // Clear search query to return to onboarding
   redirectParent('');
@@ -1844,7 +1854,7 @@ function loadApplicationData() {
       
       // Auto-set form active payer to current user if matches, otherwise the first member
       const matchingMember = state.members.find(m => m.email && state.user.email && m.email.toLowerCase().trim() === state.user.email.toLowerCase().trim());
-      activeFormPayer = matchingMember ? matchingMember.name : (state.members[0] ? state.members[0].name : '');
+      activeFormPayer = matchingMember ? matchingMember.id : (state.members[0] ? state.members[0].id : '');
       
       renderPayerSelectorGrid();
       renderCategorySelectorGrid();
@@ -1903,12 +1913,12 @@ function calculateClientSettlement(unsettled, members, categories) {
   
   const balances = {};
   mems.forEach(m => {
-    balances[m.name] = 0;
+    balances[m.id] = 0;
   });
   
   unsettled.forEach(e => {
     const amt = Number(e.amount);
-    const payer = e.payer;
+    const payer = e.payer; // Member ID
     
     // Find category
     const cat = cats.find(c => c.id === e.category || c.name === e.category);
@@ -1916,14 +1926,14 @@ function calculateClientSettlement(unsettled, members, categories) {
     if (!cat) {
       // equal split fallback
       mems.forEach(m => {
-        ratios[m.name] = 100 / mems.length;
+        ratios[m.id] = 100 / mems.length;
       });
     } else {
       try {
         ratios = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
       } catch (err) {
         mems.forEach(m => {
-          ratios[m.name] = 100 / mems.length;
+          ratios[m.id] = 100 / mems.length;
         });
       }
     }
@@ -1933,10 +1943,10 @@ function calculateClientSettlement(unsettled, members, categories) {
     }
     
     mems.forEach(m => {
-      const ratio = Number(ratios[m.name]) || 0;
+      const ratio = Number(ratios[m.id]) || 0;
       const share = amt * (ratio / 100);
-      if (balances[m.name] !== undefined) {
-        balances[m.name] -= share;
+      if (balances[m.id] !== undefined) {
+        balances[m.id] -= share;
       }
     });
   });
@@ -1946,11 +1956,11 @@ function calculateClientSettlement(unsettled, members, categories) {
   const creditors = [];
   
   mems.forEach(m => {
-    const bal = Math.round(balances[m.name]);
+    const bal = Math.round(balances[m.id]);
     if (bal < -0.1) {
-      debtors.push({ name: m.name, amount: -bal });
+      debtors.push({ id: m.id, name: m.name, amount: -bal });
     } else if (bal > 0.1) {
-      creditors.push({ name: m.name, amount: bal });
+      creditors.push({ id: m.id, name: m.name, amount: bal });
     }
   });
   
@@ -2003,12 +2013,12 @@ function renderPayerSelectorGrid() {
   state.members.forEach(m => {
     const pill = document.createElement('div');
     pill.className = 'pill-option';
-    if (m.name === activeFormPayer) {
+    if (m.id === activeFormPayer) {
       pill.classList.add('active');
       pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
       pill.style.borderColor = m.color;
     }
-    pill.dataset.payerName = m.name;
+    pill.dataset.payerId = m.id;
     pill.style.setProperty('--shadow-color', m.color + '40');
     
     pill.innerHTML = `
@@ -2025,7 +2035,7 @@ function renderPayerSelectorGrid() {
       pill.classList.add('active');
       pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
       pill.style.borderColor = m.color;
-      activeFormPayer = m.name;
+      activeFormPayer = m.id;
     });
     
     container.appendChild(pill);
@@ -2173,7 +2183,7 @@ function renderExpenseHistory() {
       card.className = 'expense-card';
       
       // Match member details
-      const member = state.members.find(m => m.name === e.payer) || { color: '#6366f1' };
+      const member = state.members.find(m => m.id === e.payer) || { color: '#6366f1', name: e.payer };
       
       // Find category details
       const cat = state.categories.find(c => c.id === e.category || c.name === e.category);
@@ -2182,7 +2192,7 @@ function renderExpenseHistory() {
       card.innerHTML = `
         <div class="expense-card-left">
           <div class="payer-avatar" style="background: rgba(${hexToRgb(member.color)}, 0.12); border-color: ${member.color}; color: ${member.color}; font-weight: 700;">
-            ${escapeHTML(e.payer.charAt(0))}
+            ${escapeHTML((member.name || '削除').charAt(0))}
           </div>
           <div class="expense-details">
             <div class="expense-title-row">
@@ -2194,7 +2204,7 @@ function renderExpenseHistory() {
         </div>
         <div class="expense-card-right">
           <span class="expense-amount">${Number(e.amount).toLocaleString()}円</span>
-          <span class="expense-payer-name">${escapeHTML(e.payer)}立替</span>
+          <span class="expense-payer-name">${escapeHTML(member.name)}立替</span>
         </div>
       `;
       
@@ -2310,7 +2320,7 @@ function registerExpense(e) {
 function openExpenseDetailDrawer(expense) {
   document.getElementById('detail-id').value = expense.id;
   document.getElementById('detail-date').textContent = formatDateStr(expense.date);
-  document.getElementById('detail-payer').textContent = expense.payer;
+  document.getElementById('detail-payer').textContent = getMemberName(expense.payer);
   document.getElementById('detail-amount').textContent = Number(expense.amount).toLocaleString() + '円';
   
   const cat = state.categories.find(c => c.id === expense.category || c.name === expense.category);
@@ -2396,7 +2406,7 @@ function executeSettlement() {
   settleBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 精算中...';
   
   // Identify active user as settler
-  const settlerName = state.user.name || 'メンバー';
+  const settlerId = state.user.id || 'mem_1';
   
   api.withSuccessHandler(res => {
     settleBtn.disabled = false;
@@ -2413,7 +2423,7 @@ function executeSettlement() {
     settleBtn.disabled = false;
     settleBtn.innerHTML = '<span class="material-symbols-outlined">price_check</span> 確定する';
     showToast('エラーが発生しました: ' + err.message);
-  }).settleExpenses(activeSsId, settlerName, categoryToSettle);
+  }).settleExpenses(activeSsId, settlerId, categoryToSettle);
 }
 
 /**
@@ -2562,32 +2572,18 @@ function saveMemberFromForm() {
   }
   
   const updatedMembers = [...state.members];
-  const newMember = { name, email, color };
   
   if (indexStr === '') {
-    // Add new member
+    // Add new member with unique ID
+    const newId = 'mem_' + Date.now();
+    const newMember = { id: newId, name, email, color };
     updatedMembers.push(newMember);
   } else {
-    // Update existing member
+    // Update existing member preserving their original ID
     const index = parseInt(indexStr, 10);
+    const originalMember = state.members[index];
+    const newMember = { id: originalMember.id, name, email, color };
     updatedMembers[index] = newMember;
-  }
-  
-  // Prepare Category splits healing
-  // If a member name was changed, we must update all category split rules mapping from originalName to name!
-  if (originalName && originalName !== name) {
-    state.categories.forEach(cat => {
-      let rules = {};
-      try {
-        rules = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
-      } catch (e) {}
-      
-      if (rules && rules[originalName] !== undefined) {
-        rules[name] = rules[originalName];
-        delete rules[originalName];
-        cat.split_rules = rules;
-      }
-    });
   }
   
   const submitBtn = document.getElementById('btn-save-member');
@@ -2601,28 +2597,7 @@ function saveMemberFromForm() {
     
     if (res && res.success) {
       showToast('メンバー設定を保存しました！');
-      
-      // If name changed, trigger category updates on the server too
-      if (originalName && originalName !== name) {
-        let indexToUpdate = 0;
-        const updateNextCategory = () => {
-          if (indexToUpdate < state.categories.length) {
-            const cat = state.categories[indexToUpdate];
-            api.withSuccessHandler(() => {
-              indexToUpdate++;
-              updateNextCategory();
-            }).withFailureHandler(() => {
-              indexToUpdate++;
-              updateNextCategory();
-            }).saveCategory(activeSsId, cat);
-          } else {
-            loadApplicationData();
-          }
-        };
-        updateNextCategory();
-      } else {
-        loadApplicationData();
-      }
+      loadApplicationData();
     } else {
       showToast('保存に失敗しました: ' + (res ? res.error : '空のレスポンス'));
     }
@@ -2642,6 +2617,13 @@ function deleteMember(index) {
     return;
   }
   
+  // Validation: Check if there are unsettled expenses paid by this member (by ID)
+  const hasUnsettledPaid = state.expenses.some(e => e.status === 'unsettled' && e.payer === m.id);
+  if (hasUnsettledPaid) {
+    showToast(`メンバー「${m.name}」が支払った未精算の立替データが存在するため、削除できません。先に精算を確定させるか、該当データを削除してください。`);
+    return;
+  }
+  
   if (!confirm(`本当にメンバー「${m.name}」を削除しますか？\n(注意: 精算計算の整合性を保つため、このメンバーが設定されているカテゴリの負担割合は、残りのメンバーへ均等割り当て等にリセットされます。)`)) {
     return;
   }
@@ -2649,15 +2631,15 @@ function deleteMember(index) {
   showToast('メンバーを削除中...');
   const updatedMembers = state.members.filter((_, idx) => idx !== index);
   
-  // Heal category splits
+  // Heal category splits using IDs
   state.categories.forEach(cat => {
     let rules = {};
     try {
       rules = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
     } catch(e) {}
     
-    if (rules && rules[m.name] !== undefined) {
-      delete rules[m.name];
+    if (rules && rules[m.id] !== undefined) {
+      delete rules[m.id];
       
       // Recalculate remaining to sum to 100%
       let remainingSum = 0;
@@ -2682,9 +2664,9 @@ function deleteMember(index) {
         let sum = 0;
         updatedMembers.forEach((rem, idx) => {
           if (idx === updatedMembers.length - 1) {
-            rules[rem.name] = 100 - sum;
+            rules[rem.id] = 100 - sum;
           } else {
-            rules[rem.name] = equalShare;
+            rules[rem.id] = equalShare;
             sum += equalShare;
           }
         });
@@ -2747,7 +2729,7 @@ function renderSettingsCategories() {
     
     const ruleParts = [];
     state.members.forEach(m => {
-      const ratio = rules && rules[m.name] !== undefined ? Number(rules[m.name]) : 0;
+      const ratio = rules && rules[m.id] !== undefined ? Number(rules[m.id]) : 0;
       if (ratio > 0) {
         ruleParts.push(`${escapeHTML(m.name)}: ${ratio}%`);
       }
@@ -2813,14 +2795,14 @@ function generateCategoryRatioSliders(rules = {}) {
   }
   
   state.members.forEach(m => {
-    let ratio = rules && rules[m.name] !== undefined ? Number(rules[m.name]) : 0;
+    let ratio = rules && rules[m.id] !== undefined ? Number(rules[m.id]) : 0;
     
     const sliderRow = document.createElement('div');
     sliderRow.style.display = 'flex';
     sliderRow.style.flexDirection = 'column';
     sliderRow.style.gap = '6px';
     sliderRow.className = 'ratio-slider-row';
-    sliderRow.dataset.memberName = m.name;
+    sliderRow.dataset.memberId = m.id;
     
     sliderRow.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
@@ -2845,9 +2827,9 @@ function generateCategoryRatioSliders(rules = {}) {
       
       // Dynamic two-way split synchronization only if there are exactly 2 members
       if (state.members.length === 2) {
-        const otherMember = state.members.find(o => o.name !== m.name);
+        const otherMember = state.members.find(o => o.id !== m.id);
         if (otherMember) {
-          const otherSliderRow = container.querySelector(`[data-member-name="${otherMember.name}"]`);
+          const otherSliderRow = container.querySelector(`[data-member-id="${otherMember.id}"]`);
           if (otherSliderRow) {
             const otherSlider = otherSliderRow.querySelector('.ratio-slider-input');
             const otherDisplay = otherSliderRow.querySelector('.ratio-val-display');
@@ -2900,9 +2882,9 @@ function openCategoryCreateModal() {
     let sum = 0;
     state.members.forEach((m, idx) => {
       if (idx === state.members.length - 1) {
-        defaultRules[m.name] = 100 - sum;
+        defaultRules[m.id] = 100 - sum;
       } else {
-        defaultRules[m.name] = defaultShare;
+        defaultRules[m.id] = defaultShare;
         sum += defaultShare;
       }
     });
@@ -2945,9 +2927,9 @@ function saveCategoryFromForm() {
   let sum = 0;
   
   sliders.forEach(slider => {
-    const memberName = slider.closest('.ratio-slider-row').dataset.memberName;
+    const memberId = slider.closest('.ratio-slider-row').dataset.memberId;
     const val = Number(slider.value);
-    split_rules[memberName] = val;
+    split_rules[memberId] = val;
     sum += val;
   });
   
