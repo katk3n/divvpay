@@ -39,6 +39,7 @@ The initialized spreadsheet contains four core sheets. Ensure any backend change
 Stores the group's dynamic list of members.
 | Column | Type | Description |
 |---|---|---|
+| `id` | String | Unique member ID (`mem_...`) |
 | `name` | String | Unique display name (Key for cost mapping) |
 | `email` | String | Optional Google email for automatic active user detection |
 | `color` | String (Hex) | Theme color for charts, badges, and progress tracks |
@@ -50,7 +51,7 @@ Categorization and basic split burden rules.
 | `id` | String | Unique ID (`cat_...`) |
 | `name` | String | Human-readable name |
 | `emoji` | String | Category icon |
-| `split_rules` | JSON String | A key-value mapping of `memberName: percentage` (e.g. `{"自分":50,"友人A":50}`) |
+| `split_rules` | JSON String | A key-value mapping of `memberId: percentage` (e.g. `{"mem_1":50,"mem_2":50}`) |
 
 ### 3. `expenses`
 Registered ledger of group costs.
@@ -58,7 +59,7 @@ Registered ledger of group costs.
 |---|---|---|
 | `id` | String | Unique ID (`exp_...`) |
 | `date` | String | ISO Date (`YYYY-MM-DD`) |
-| `payer` | String | Member name who paid the amount |
+| `payer` | String | Member ID who paid the amount |
 | `amount` | Number | Integer value |
 | `category` | String | Category ID |
 | `description` | String | Memo / Shop Name |

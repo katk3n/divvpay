@@ -9,12 +9,22 @@
 - **Space-Dark Glassmorphism UI**: Built with pure vanilla CSS, featuring vibrant gradients, clean glass cards, smooth transitions, and premium micro-interactions.
 - **Standalone & Multi-Group Support**: Fully parameter-driven via URL query strings (`?id=SPREADSHEET_ID`). A single deployed Web App URL can manage different friend groups and trips simply by changing the sheet ID.
 - **Automated Onboarding & Self-Healing Database**: 
-  - If no ID is provided, an elegant segment-controlled onboarding view guides users to either automatically initialize a new spreadsheet under their own Google Drive or paste an existing Sheet URL/ID.
+  - If no ID is provided, an elegant onboarding view guides users to either automatically initialize a new spreadsheet under their own Google Drive or paste an existing Sheet URL/ID.
   - Backend tables (`expenses`, `settlements`, `members`, `categories`) automatically self-heal and initialize if sheets are missing.
-- **Dynamic Member CRUD**: Manage an arbitrary number of group members. Auto-healing data logic adjusts split ratios when members are renamed or deleted.
+- **ID-Based Member References (Primary/Foreign Key Design)**: Ensures 100% data consistency. Renaming a member instantly updates across the UI without modifying any database cells.
 - **Advanced Custom Split Ratios**: Adjust cost burdens using dynamic sliders. Includes real-time sum validation (sums to 100%) and automatic mutual adjustment for 2-member groups.
 - **Optimal Settlement Engine**: Implements a greedy matching algorithm to calculate the absolute minimum number of bank/cash transfers needed to clear all debts.
 - **Local Sandbox / Mock Mode**: Double-clicking `dist/index.html` locally triggers an offline Mock Mode utilizing `localStorage`, allowing developers to test features without any GAS connection.
+
+---
+
+## 🔒 Security Architecture
+
+DivvPay prioritizes data safety and privacy through rigorous engineering practices:
+1. **Google Drive ACL Enforcement (`USER_ACCESSING`)**: Deployed to execute under the accessing user's context. Only users explicitly invited via Google Sheets sharing can view or modify data.
+2. **Formula Injection (CSV Injection) Prevention**: To thwart malicious formulas (e.g., `=IMPORTXML`) from harvesting spreadsheet data, a backend sanitization layer (`sanitizeTextInput`) prefixes cells starting with `=`, `+`, `-`, or `@` with a single quote `'`.
+3. **Cross-Site Scripting (XSS) Mitigation**: All dynamic outputs render securely via an `escapeHTML` helper, and critical UI labels utilize browser-safe `textContent` bindings instead of raw HTML insertion.
+4. **No External Dependecies / Eval**: Runs completely on vanilla JS, avoiding the safety risks associated with dynamic evaluation (`eval`) or bloated NPM frameworks.
 
 ---
 
@@ -79,5 +89,3 @@ To deploy DivvPay live:
 When deploying the web app (Deploy > New deployment > Web app):
 - **Execute as**: `User accessing the web app` (Enforces security ACLs)
 - **Who has access**: `Anyone`
-
-Copy the Web App URL, paste a spreadsheet ID as a parameter (e.g., `?id=YOUR_SPREADSHEET_ID`), and share it with your friends!
