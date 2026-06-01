@@ -48,8 +48,18 @@ function doGet(e) {
   }
   template.webAppUrl = webAppUrl;
   
+  var title = 'DivvPay | 友人との立替・精算管理';
+  if (spreadsheetId) {
+    try {
+      var ss = SpreadsheetApp.openById(spreadsheetId);
+      title = ss.getName() + ' | DivvPay';
+    } catch(err) {
+      // Falls back to default if spreadsheet is not found or has no access permissions
+    }
+  }
+  
   return template.evaluate()
-    .setTitle('DivvPay | 友人との立替・精算管理')
+    .setTitle(title)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }

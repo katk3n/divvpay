@@ -1828,6 +1828,9 @@ function loadApplicationData() {
       state.spreadsheetUrl = response.spreadsheetUrl;
       state.spreadsheetName = response.spreadsheetName || 'DivvPay スプレッドシート';
       
+      // Update browser tab title dynamically
+      document.title = `${state.spreadsheetName} | DivvPay`;
+      
       // Update UI elements
       document.getElementById('header-user-email').textContent = `${state.user.email || 'スプレッドシート共有メンバー'} (${state.user.name || 'ゲスト'})`;
       document.getElementById('settings-spreadsheet-link').href = state.spreadsheetUrl;
