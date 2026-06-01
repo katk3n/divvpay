@@ -1434,6 +1434,7 @@ h1, h2, h3, h4 {
   <!-- Variable Injection from GAS server to client -->
   <script>
     const SPREADSHEET_ID = "<?= spreadsheetId ?>";
+    const WEB_APP_URL = "<?= webAppUrl ?>";
   </script>
 
   <!-- Server-side template inclusion of JavaScript -->
@@ -1716,6 +1717,28 @@ function extractSpreadsheetId(input) {
   return '';
 }
 
+function redirectParent(id) {
+  if (isLocal) {
+    // Local environment: Simply set window.location.search (safe for file://)
+    window.location.search = id ? '?id=' + id : '';
+  } else {
+    // GAS environment: Use programmatic anchor click with target="_top" to redirect the parent window from within sandboxed iframe
+    const baseUrl = typeof WEB_APP_URL !== 'undefined' ? WEB_APP_URL : '';
+    if (!baseUrl) {
+      showToast('リダイレクトエラー: ウェブアプリのURLが取得できませんでした。');
+      return;
+    }
+    const targetUrl = id ? baseUrl + '?id=' + id : baseUrl;
+    
+    const a = document.createElement('a');
+    a.href = targetUrl;
+    a.target = '_top';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+}
+
 function launchFromOnboarding() {
   const input = document.getElementById('onboarding-ss-input').value;
   const parsedId = extractSpreadsheetId(input);
@@ -1729,8 +1752,8 @@ function launchFromOnboarding() {
   launchBtn.disabled = true;
   launchBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 起動中...';
   
-  // Reload page with parameter (Safe for local file:// protocol)
-  window.location.search = '?id=' + parsedId;
+  // Redirect parent window to load the sheet
+  redirectParent(parsedId);
 }
 
 function switchOnboardTab(tab) {
@@ -1763,7 +1786,7 @@ function createNewSheetFromOnboarding() {
       // Save custom name to mock store
       localStorage.setItem('divvpay_mock_name_' + mockId, name);
       showToast('【開発Mock】精算シート「' + name + '」を作成しました！');
-      window.location.search = '?id=' + mockId;
+      redirectParent(mockId);
     }, 1000);
     return;
   }
@@ -1774,8 +1797,8 @@ function createNewSheetFromOnboarding() {
     
     if (res && res.success) {
       showToast('精算スプレッドシート「' + name + '」を作成しました！');
-      // Redirect to the new spreadsheet ID (Safe for local file:// protocol)
-      window.location.search = '?id=' + res.id;
+      // Redirect parent window to load the new sheet
+      redirectParent(res.id);
     } else {
       showToast(res ? res.error : 'スプレッドシートの作成に失敗しました。');
     }
@@ -1787,8 +1810,8 @@ function createNewSheetFromOnboarding() {
 }
 
 function resetToOnboarding() {
-  // Clear search query to return to onboarding (Safe for local file:// protocol)
-  window.location.search = '';
+  // Clear search query to return to onboarding
+  redirectParent('');
 }
 
 /**
@@ -1940,7 +1963,7 @@ function calculateClientSettlement(unsettled, members, categories) {
         from: debtor.name,
         to: creditor.name,
         amount: Math.round(transAmt),
-        text: `${debtor.name} ➔ ${creditor.name} : ${Math.round(transAmt).toLocaleString()}円`
+        text: `${escapeHTML(debtor.name)} ➔ ${escapeHTML(creditor.name)} : ${Math.round(transAmt).toLocaleString()}円`
       });
     }
     
@@ -2156,7 +2179,7 @@ function renderExpenseHistory() {
       card.innerHTML = `
         <div class="expense-card-left">
           <div class="payer-avatar" style="background: rgba(${hexToRgb(member.color)}, 0.12); border-color: ${member.color}; color: ${member.color}; font-weight: 700;">
-            ${e.payer.charAt(0)}
+            ${escapeHTML(e.payer.charAt(0))}
           </div>
           <div class="expense-details">
             <div class="expense-title-row">
@@ -2168,7 +2191,7 @@ function renderExpenseHistory() {
         </div>
         <div class="expense-card-right">
           <span class="expense-amount">${Number(e.amount).toLocaleString()}円</span>
-          <span class="expense-payer-name">${e.payer}立替</span>
+          <span class="expense-payer-name">${escapeHTML(e.payer)}立替</span>
         </div>
       `;
       
@@ -2212,7 +2235,7 @@ function renderExpenseHistory() {
         
         <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-secondary); border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
           <span>精算総額: <b style="color: white;">${Number(s.total_amount).toLocaleString()}円</b></span>
-          <span>精算者: ${s.settler || 'システム'}</span>
+          <span>精算者: ${escapeHTML(s.settler || 'システム')}</span>
         </div>
         
         <div class="settlement-card-details">
@@ -2723,7 +2746,7 @@ function renderSettingsCategories() {
     state.members.forEach(m => {
       const ratio = rules && rules[m.name] !== undefined ? Number(rules[m.name]) : 0;
       if (ratio > 0) {
-        ruleParts.push(`${m.name}: ${ratio}%`);
+        ruleParts.push(`${escapeHTML(m.name)}: ${ratio}%`);
       }
     });
     

@@ -12,6 +12,22 @@ var SHEETS = {
 };
 
 /**
+ * Sanitize text input to prevent Spreadsheet Formula Injection (CSV Injection).
+ * Prefixes strings starting with =, +, -, @ with a single quote to force text evaluation.
+ */
+function sanitizeTextInput(text) {
+  if (text === null || text === undefined) return '';
+  var str = String(text).trim();
+  if (str.length > 0) {
+    var firstChar = str.charAt(0);
+    if (firstChar === '=' || firstChar === '+' || firstChar === '-' || firstChar === '@') {
+      return "'" + str;
+    }
+  }
+  return str;
+}
+
+/**
  * Serves the web application.
  */
 function doGet(e) {
@@ -23,6 +39,14 @@ function doGet(e) {
   
   var template = HtmlService.createTemplateFromFile('index');
   template.spreadsheetId = spreadsheetId;
+  
+  var webAppUrl = '';
+  try {
+    webAppUrl = ScriptApp.getService().getUrl();
+  } catch(err) {
+    // Falls back to empty string if run in execution contexts without ScriptApp context
+  }
+  template.webAppUrl = webAppUrl;
   
   return template.evaluate()
     .setTitle('DivvPay | 友人との立替・精算管理')
@@ -212,10 +236,10 @@ function addExpense(spreadsheetId, expense) {
     sheet.appendRow([
       id,
       expense.date,
-      expense.payer,
+      sanitizeTextInput(expense.payer),
       Number(expense.amount),
       expense.category,
-      expense.description || '',
+      sanitizeTextInput(expense.description || ''),
       'unsettled',
       '',
       createdAt
@@ -391,9 +415,9 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
     settlementSheet.appendRow([
       settlementId,
       new Date().toLocaleDateString('ja-JP'),
-      settlerName || 'システム',
+      sanitizeTextInput(settlerName || 'システム'),
       totalAmount,
-      detailsText,
+      sanitizeTextInput(detailsText),
       nowStr
     ]);
     
@@ -451,8 +475,8 @@ function saveCategory(spreadsheetId, category) {
       id = 'cat_' + new Date().getTime() + '_' + Math.random().toString(36).substr(2, 5);
       sheet.appendRow([
         id,
-        category.name,
-        category.emoji || '📂',
+        sanitizeTextInput(category.name),
+        sanitizeTextInput(category.emoji || '📂'),
         JSON.stringify(category.split_rules || {})
       ]);
     } else {
@@ -465,8 +489,8 @@ function saveCategory(spreadsheetId, category) {
       }
       if (foundRow === -1) throw new Error('カテゴリが見つかりませんでした。');
       
-      sheet.getRange(foundRow, nameCol + 1).setValue(category.name);
-      sheet.getRange(foundRow, emojiCol + 1).setValue(category.emoji || '📂');
+      sheet.getRange(foundRow, nameCol + 1).setValue(sanitizeTextInput(category.name));
+      sheet.getRange(foundRow, emojiCol + 1).setValue(sanitizeTextInput(category.emoji || '📂'));
       sheet.getRange(foundRow, splitCol + 1).setValue(JSON.stringify(category.split_rules || {}));
     }
     
@@ -518,8 +542,8 @@ function saveMemberSettings(spreadsheetId, members) {
     
     for (var i = 0; i < members.length; i++) {
       sheet.appendRow([
-        members[i].name,
-        members[i].email || '',
+        sanitizeTextInput(members[i].name),
+        sanitizeTextInput(members[i].email || ''),
         members[i].color || '#6366f1'
       ]);
     }
