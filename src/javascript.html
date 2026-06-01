@@ -290,12 +290,20 @@ function redirectParent(id) {
     }
     const targetUrl = id ? baseUrl + '?id=' + id : baseUrl;
     
-    const a = document.createElement('a');
-    a.href = targetUrl;
-    a.target = '_top';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // Use pre-existing static anchor in DOM if available (works more reliably on mobile browsers like Firefox)
+    const staticLink = document.getElementById('redirect-parent-link');
+    if (staticLink) {
+      staticLink.href = targetUrl;
+      staticLink.click();
+    } else {
+      // Fallback: Dynamically create anchor
+      const a = document.createElement('a');
+      a.href = targetUrl;
+      a.target = '_top';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   }
 }
 
@@ -346,20 +354,60 @@ function createNewSheetFromOnboarding() {
       // Save custom name to mock store
       localStorage.setItem('divvpay_mock_name_' + mockId, name);
       showToast('【開発Mock】精算シート「' + name + '」を作成しました！');
-      redirectParent(mockId);
+      
+      // Transform button to a native anchor link to absolutely bypass mobile browser pop-up/redirect blockers
+      const parent = createBtn.parentNode;
+      const linkBtn = document.createElement('a');
+      linkBtn.id = 'btn-create-sheet-onboarding';
+      linkBtn.className = 'btn btn-primary';
+      
+      // Match style constraints (Space-Dark Glassmorphism UI)
+      linkBtn.style.height = '50px';
+      linkBtn.style.display = 'flex';
+      linkBtn.style.alignItems = 'center';
+      linkBtn.style.justifyContent = 'center';
+      linkBtn.style.textDecoration = 'none';
+      linkBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+      linkBtn.style.borderColor = '#10b981';
+      linkBtn.innerHTML = '<span class="material-symbols-outlined" style="margin-right: 8px;">rocket_launch</span> 🎉 作成完了！タップして開始';
+      
+      linkBtn.href = '?id=' + mockId;
+      
+      // Replace button with anchor
+      parent.replaceChild(linkBtn, createBtn);
     }, 1000);
     return;
   }
   
   api.withSuccessHandler(res => {
-    createBtn.disabled = false;
-    createBtn.innerHTML = originalHtml;
-    
     if (res && res.success) {
       showToast('精算スプレッドシート「' + name + '」を作成しました！');
-      // Redirect parent window to load the new sheet
-      redirectParent(res.id);
+      
+      // Transform button to a native anchor link to absolutely bypass mobile browser pop-up/redirect blockers (e.g. mobile Firefox/Safari)
+      const parent = createBtn.parentNode;
+      const linkBtn = document.createElement('a');
+      linkBtn.id = 'btn-create-sheet-onboarding';
+      linkBtn.className = 'btn btn-primary';
+      
+      // Match style constraints (Space-Dark Glassmorphism UI)
+      linkBtn.style.height = '50px';
+      linkBtn.style.display = 'flex';
+      linkBtn.style.alignItems = 'center';
+      linkBtn.style.justifyContent = 'center';
+      linkBtn.style.textDecoration = 'none';
+      linkBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+      linkBtn.style.borderColor = '#10b981';
+      linkBtn.innerHTML = '<span class="material-symbols-outlined" style="margin-right: 8px;">rocket_launch</span> 🎉 作成完了！タップして開始';
+      
+      const baseUrl = typeof WEB_APP_URL !== 'undefined' ? WEB_APP_URL : '';
+      linkBtn.href = baseUrl ? baseUrl + '?id=' + res.id : '';
+      linkBtn.target = '_top';
+      
+      // Replace button with the anchor so any tap is a natural browser hyperlink navigation (100% immune to blockers)
+      parent.replaceChild(linkBtn, createBtn);
     } else {
+      createBtn.disabled = false;
+      createBtn.innerHTML = originalHtml;
       showToast(res ? res.error : 'スプレッドシートの作成に失敗しました。');
     }
   }).withFailureHandler(err => {

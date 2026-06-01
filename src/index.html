@@ -15,6 +15,9 @@
   <!-- Toast Notification -->
   <div id="toast" class="toast">メッセージがここに表示されます</div>
 
+  <!-- Hidden anchor for safe top-level redirection in mobile browsers (e.g. Firefox, Safari) -->
+  <a id="redirect-parent-link" target="_top" style="display: none;"></a>
+
   <!-- 1. ONBOARDING VIEW (Shown when no spreadsheet ID is provided) -->
   <div id="onboarding-view" class="onboarding-container fade-in-el" style="display: none;">
     <div class="glass-card onboarding-card">
@@ -55,7 +58,7 @@
         </div>
         <button id="btn-create-sheet-onboarding" class="btn btn-primary" onclick="createNewSheetFromOnboarding()" style="height: 50px;">
           <span class="material-symbols-outlined">rocket_launch</span>
-          精算シートを自動作成して開始
+          精算シートを自動作成
         </button>
       </div>
 
