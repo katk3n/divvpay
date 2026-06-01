@@ -1,0 +1,2998 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <base target="_top">
+  <title>DivvPay | 友人との立替・精算管理</title>
+  <!-- Material Symbols for premium Google UI icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  
+  <!-- Server-side template inclusion of CSS -->
+  <style>
+/* CSS Reset & Variables */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  
+  /* Color Palette - Premium Space Dark & Glowing Accents */
+  --bg-color: #0b0f19;
+  --bg-glow: radial-gradient(circle at 50% -20%, rgba(99, 102, 241, 0.15) 0%, rgba(11, 15, 25, 0) 60%);
+  --panel-bg: rgba(17, 24, 39, 0.45);
+  --panel-border: rgba(255, 255, 255, 0.07);
+  --panel-border-hover: rgba(255, 255, 255, 0.15);
+  
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  
+  --accent-indigo: #6366f1;
+  --accent-cyan: #06b6d4;
+  --accent-pink: #ec4899;
+  --accent-emerald: #10b981;
+  --accent-amber: #f59e0b;
+  --accent-rose: #f43f5e;
+  
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  --transition-smooth: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: all 0.15s ease;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-color);
+  background-image: var(--bg-glow);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+  padding-bottom: 90px; /* Safe space for mobile nav */
+}
+
+/* Typography */
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Glassmorphism Container */
+.glass-container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.glass-card {
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: 24px;
+  padding: 24px;
+  margin-bottom: 20px;
+  transition: var(--transition-smooth);
+}
+
+.glass-card:hover {
+  border-color: var(--panel-border-hover);
+}
+
+/* Onboarding Layout CSS (NEW) */
+.onboarding-container {
+  min-height: 95vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.onboarding-card {
+  width: 100%;
+  max-width: 480px;
+  text-align: center;
+  padding: 40px 32px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+
+.onboarding-logo {
+  background: linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan));
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 36px;
+  margin: 0 auto 20px;
+  box-shadow: 0 0 25px rgba(99, 102, 241, 0.4);
+}
+
+.onboarding-title {
+  font-size: 32px;
+  font-weight: 800;
+  background: linear-gradient(to right, #ffffff, #a5b4fc, #38bdf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 8px;
+}
+
+.onboarding-subtitle {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 32px;
+}
+
+.onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 18px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.onboarding-step {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.step-num {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.step-text h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 2px;
+}
+
+.step-text p {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.onboarding-divider {
+  margin: 18px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-transform: uppercase;
+}
+
+.onboarding-divider::before, .onboarding-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+}
+
+/* Header Aesthetics */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding: 8px 4px;
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  background: linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan));
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 22px;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+}
+
+.app-title {
+  font-size: 22px;
+  background: linear-gradient(to right, #ffffff, #a5b4fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.user-badge {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 99px;
+  padding: 6px 14px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  max-width: 220px;
+}
+
+.user-badge span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-emerald);
+  box-shadow: 0 0 8px var(--accent-emerald);
+}
+
+/* Spreadsheet Dynamic Title */
+.spreadsheet-title-container {
+  margin-top: -8px;
+  margin-bottom: 24px;
+  padding: 0 4px;
+  max-width: 100%;
+}
+
+.spreadsheet-dynamic-title {
+  font-size: 24px;
+  font-weight: 800;
+  font-family: var(--font-heading);
+  background: linear-gradient(to right, #ffffff, #c7d2fe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 520px;
+  line-height: 1.2;
+}
+
+/* Hero Stats Section */
+.hero-total-title {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.hero-total-amount {
+  font-size: 40px;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  background: linear-gradient(to right, #ffffff, #818cf8, #38bdf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.1;
+  margin-bottom: 16px;
+}
+
+.hero-summary-box {
+  background: rgba(99, 102, 241, 0.07);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hero-summary-icon {
+  font-size: 24px;
+  background: rgba(99, 102, 241, 0.15);
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-summary-text {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+  flex: 1;
+}
+
+/* Interactive Elements (Buttons) */
+.btn {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 15px;
+  padding: 12px 20px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: var(--transition-smooth);
+  width: 100%;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan));
+  color: white;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(99, 102, 241, 0.5);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-danger {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #fda4af;
+}
+
+.btn-danger:hover {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: rgba(244, 63, 94, 0.5);
+}
+
+/* Tab Navigation (Bottom Navigation on Mobile, Sleek Floating Panel) */
+.nav-panel {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 608px;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-around;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  transition: var(--transition-smooth);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 500;
+  transition: var(--transition-fast);
+  flex: 1;
+}
+
+.nav-item.active {
+  color: white;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Category Grid & Visual Bars */
+.category-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.category-stat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.category-stat-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.category-progress-bg {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.category-progress-bar {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--accent-indigo), var(--accent-cyan));
+  width: 0%;
+  transition: width 0.8s cubic-bezier(0.1, 0.8, 0.2, 1);
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-family: var(--font-heading);
+}
+
+.form-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 12px 16px;
+  color: white;
+  font-family: var(--font-body);
+  font-size: 15px;
+  transition: var(--transition-fast);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent-indigo);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
+}
+
+/* Amount Input Specific Styles */
+.amount-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.amount-currency {
+  position: absolute;
+  left: 16px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--text-secondary);
+}
+
+.amount-input {
+  padding-left: 42px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+}
+
+/* Pill selector grid (Dynamic Payer Selection) */
+.pill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.pill-option {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  user-select: none;
+}
+
+.pill-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--panel-border-hover);
+}
+
+.pill-option.active {
+  box-shadow: 0 0 12px var(--shadow-color);
+  color: white;
+}
+
+/* Category Grid Picker */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.category-option {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 10px 4px;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.category-option .cat-icon {
+  font-size: 20px;
+}
+
+.category-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.category-option.active {
+  background: rgba(6, 182, 212, 0.12);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+}
+
+/* Expense List Cards */
+.expense-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.expense-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 18px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: var(--transition-fast);
+  cursor: pointer;
+}
+
+.expense-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--panel-border-hover);
+}
+
+.expense-card-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+
+.payer-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  border: 1.5px solid rgba(99, 102, 241, 0.2);
+}
+
+.expense-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.expense-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.expense-category-tag {
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.expense-memo {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.expense-card-right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.expense-amount {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.expense-payer-name {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Modals & Dialogs (Native Popovers/Glass Dialogs) */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  padding: 16px;
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-content {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  border-radius: 24px;
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  transform: scale(0.9);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.modal-overlay.active .modal-content {
+  transform: scale(1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.modal-close {
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+
+.modal-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* History Segmented Switcher */
+.segment-control {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 4px;
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.segment-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  flex: 1;
+  transition: var(--transition-fast);
+}
+
+.segment-btn.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+/* Toast Notifications */
+.toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translate(-50%, -100px);
+  background: rgba(17, 24, 39, 0.9);
+  border: 1px solid var(--accent-indigo);
+  border-radius: 12px;
+  padding: 12px 24px;
+  color: white;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  z-index: 3000;
+  pointer-events: none;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.2);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.toast.active {
+  transform: translate(-50%, 0);
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in-el {
+  animation: fadeIn 0.4s ease forwards;
+}
+
+/* Empty states */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
+
+.empty-state-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+/* Detail Drawer details */
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  align-items: center;
+}
+
+.detail-label {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.detail-val {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 14px;
+  text-align: right;
+  word-break: break-all;
+}
+
+/* Settlement History details spacing */
+.settlement-card-details {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 13px;
+  white-space: pre-line;
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  color: #a5b4fc;
+  text-align: left;
+}
+
+/* Access Denied Page Style */
+.access-denied-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+  text-align: center;
+  padding: 24px;
+}
+
+.error-shield {
+  font-size: 64px;
+  margin-bottom: 24px;
+  color: var(--accent-rose);
+  text-shadow: 0 0 20px rgba(244, 63, 94, 0.4);
+}
+
+/* Color slider sync styles */
+.ratio-slider-row input[type="range"] {
+  outline: none;
+  background: rgba(255, 255, 255, 0.1);
+  height: 6px;
+  border-radius: 3px;
+  -webkit-appearance: none;
+}
+
+.ratio-slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: currentColor;
+  cursor: pointer;
+  border: 2px solid #000;
+}
+
+/* Responsive Overrides */
+@media (min-width: 640px) {
+  body {
+    padding-bottom: 24px;
+  }
+  .nav-panel {
+    position: relative;
+    transform: none;
+    left: 0;
+    width: 100%;
+    margin-bottom: 24px;
+    bottom: 0;
+  }
+}
+</style>
+
+</head>
+<body>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">メッセージがここに表示されます</div>
+
+  <!-- 1. ONBOARDING VIEW (Shown when no spreadsheet ID is provided) -->
+  <div id="onboarding-view" class="onboarding-container fade-in-el" style="display: none;">
+    <div class="glass-card onboarding-card">
+      <div class="onboarding-logo">
+        <span class="material-symbols-outlined">payments</span>
+      </div>
+      <h1 class="onboarding-title">DivvPay</h1>
+      <p class="onboarding-subtitle">友人やグループでの立替費用をスマートに精算</p>
+      
+      <div class="onboarding-steps">
+        <div class="onboarding-step">
+          <span class="step-num">1</span>
+          <div class="step-text">
+            <h4>Google スプレッドシートを作成</h4>
+            <p>データを安全に保管するためのスプレッドシートを用意します。</p>
+          </div>
+        </div>
+        <div class="onboarding-step">
+          <span class="step-num">2</span>
+          <div class="step-text">
+            <h4>URL または ID をペースト</h4>
+            <p>スプレッドシートのURLを下の入力欄に入力します。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Segment Control to Switch Between New and Connect (NEW) -->
+      <div class="segment-control" style="margin-top: 24px; margin-bottom: 20px;">
+        <button id="seg-onboard-new" class="segment-btn active" onclick="switchOnboardTab('new')">新規シートを作成</button>
+        <button id="seg-onboard-connect" class="segment-btn" onclick="switchOnboardTab('connect')">既存のシートを接続</button>
+      </div>
+
+      <!-- Tab 1: Create New Sheet (NEW) -->
+      <div id="onboard-tab-new">
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label class="form-label" style="text-align: left;">イベント名（スプレッドシートのファイル名になります）</label>
+          <input type="text" id="onboarding-name-input" class="form-input" placeholder="例：卒業旅行の割り勘、週末バーベキュー" style="font-size: 13px;">
+        </div>
+        <button id="btn-create-sheet-onboarding" class="btn btn-primary" onclick="createNewSheetFromOnboarding()" style="height: 50px;">
+          <span class="material-symbols-outlined">rocket_launch</span>
+          精算シートを自動作成して開始
+        </button>
+      </div>
+
+      <!-- Tab 2: Connect Existing Sheet (NEW) -->
+      <div id="onboard-tab-connect" style="display: none;">
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label class="form-label" style="text-align: left;">スプレッドシートの URL または ID</label>
+          <input type="text" id="onboarding-ss-input" class="form-input" placeholder="https://docs.google.com/spreadsheets/d/..." style="font-size: 13px;">
+        </div>
+        <button id="btn-launch-onboarding" class="btn btn-primary" onclick="launchFromOnboarding()" style="height: 50px;">
+          <span class="material-symbols-outlined">link</span>
+          接続して開始する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. MAIN APPLICATION VIEW -->
+  <div id="main-app-view" class="glass-container" style="display: none;">
+    
+    <!-- Application Header -->
+    <header class="app-header fade-in-el">
+      <div class="logo-section">
+        <div class="logo-icon">
+          <span class="material-symbols-outlined">payments</span>
+        </div>
+        <h1 class="app-title">DivvPay</h1>
+      </div>
+      <div class="user-badge">
+        <span class="user-dot"></span>
+        <span id="header-user-email">Loading...</span>
+      </div>
+    </header>
+
+    <!-- Spreadsheet Dynamic Title -->
+    <div class="spreadsheet-title-container fade-in-el">
+      <h2 id="spreadsheet-name" class="spreadsheet-dynamic-title">読み込み中...</h2>
+    </div>
+
+    <!-- TAB 1: DASHBOARD -->
+    <main id="tab-dashboard" class="tab-content fade-in-el">
+      <!-- Total Unsettled Card -->
+      <div class="glass-card">
+        <h3 class="hero-total-title">グループ全体の未精算額</h3>
+        <div id="dashboard-total" class="hero-total-amount">0円</div>
+        
+        <!-- Money Transfer Explanation Box -->
+        <div id="dashboard-settlement-path" class="hero-summary-box">
+          <div class="hero-summary-icon">
+            <span class="material-symbols-outlined" style="color: var(--accent-indigo);">payments</span>
+          </div>
+          <div id="dashboard-settlement-text" class="hero-summary-text">
+            データを取得しています...
+          </div>
+        </div>
+        
+        <button id="btn-open-settle-modal" class="btn btn-primary" style="margin-top: 8px;">
+          <span class="material-symbols-outlined">check_circle</span>
+          今すぐ精算を確定する
+        </button>
+      </div>
+
+      <!-- Category Breakdown Card -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-cyan);">pie_chart</span>
+          カテゴリ別支出 (未精算)
+        </h3>
+        <div id="category-stats" class="category-stats-list">
+          <!-- Dynamic category list injected here -->
+          <div class="empty-state">
+            <div class="empty-state-icon">🎉</div>
+            <p>未精算の立替はありません。</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- TAB 2: REGISTER EXPENSE FORM -->
+    <main id="tab-add" class="tab-content fade-in-el" style="display: none;">
+      <div class="glass-card">
+        <h2 style="font-size: 20px; margin-bottom: 20px; text-align: center;">立替費用の登録</h2>
+        
+        <form id="expense-form" onsubmit="event.preventDefault();">
+          
+          <!-- Amount Input (Large & Styled) -->
+          <div class="form-group">
+            <label class="form-label">金額</label>
+            <div class="amount-input-wrapper">
+              <span class="amount-currency">¥</span>
+              <input type="number" id="input-amount" class="form-input amount-input" placeholder="0" required min="1" pattern="[0-9]*" inputmode="numeric">
+            </div>
+          </div>
+
+          <!-- Payer Selection (Dynamic Pills) -->
+          <div class="form-group">
+            <label class="form-label">支払った人</label>
+            <div id="form-payer-grid" class="pill-grid">
+              <!-- Dynamically injected members pills -->
+            </div>
+          </div>
+
+          <!-- Category Grid Select -->
+          <div class="form-group">
+            <label class="form-label">カテゴリ</label>
+            <div id="form-category-grid" class="category-grid">
+              <!-- Dynamic category list injected here -->
+            </div>
+          </div>
+
+          <!-- Date Selector -->
+          <div class="form-group">
+            <label class="form-label">日付</label>
+            <input type="date" id="input-date" class="form-input" required>
+          </div>
+
+          <!-- Memo / Description -->
+          <div class="form-group">
+            <label class="form-label">メモ (用途、店名など)</label>
+            <input type="text" id="input-description" class="form-input" placeholder="居酒屋、タクシー、スーパー等">
+          </div>
+
+          <button type="submit" id="btn-submit-expense" class="btn btn-primary" style="margin-top: 10px;">
+            <span class="material-symbols-outlined">add_task</span>
+            立替を登録する
+          </button>
+        </form>
+      </div>
+    </main>
+
+    <!-- TAB 3: EXPENSE HISTORY LIST -->
+    <main id="tab-history" class="tab-content fade-in-el" style="display: none;">
+      <!-- Segment Control (Unsettled / Settled) -->
+      <div class="segment-control">
+        <button id="seg-unsettled" class="segment-btn active" onclick="switchHistorySegment('unsettled')">未精算</button>
+        <button id="seg-settled" class="segment-btn" onclick="switchHistorySegment('settled')">精算済履歴</button>
+      </div>
+
+      <!-- Expense List Container -->
+      <div id="expense-list-container" class="expense-list">
+        <!-- Dynamically injected by JS -->
+      </div>
+      
+      <!-- Settlement History Container (hidden by default) -->
+      <div id="settlement-list-container" class="expense-list" style="display: none;">
+        <!-- Injected by JS -->
+      </div>
+    </main>
+
+    <!-- TAB 4: SETTINGS -->
+    <main id="tab-settings" class="tab-content fade-in-el" style="display: none;">
+      <!-- 1. Registered Accounts Card (Dynamic list) -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-indigo);">group</span>
+          メンバー管理
+        </h3>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
+          精算グループのメンバーを管理します。Googleアカウント（メールアドレス）を設定すると、ログインしたユーザー名が自動判別されます。
+        </p>
+        
+        <div id="settings-members-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+          <!-- Dynamically filled by JS -->
+        </div>
+        
+        <button onclick="openMemberCreateModal();" class="btn btn-secondary" style="width: 100%; height: 46px;">
+          <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span>
+          新規メンバーを追加する
+        </button>
+      </div>
+
+      <!-- 2. Category Settings Card -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-cyan);">category</span>
+          カテゴリ設定
+        </h3>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
+          立替費用の分類（カテゴリ）と、それぞれのメンバー間での基本負担割合を設定します。
+        </p>
+        
+        <div id="settings-categories-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+          <!-- Dynamically filled by JS -->
+        </div>
+        
+        <button onclick="openCategoryCreateModal();" class="btn btn-secondary" style="width: 100%; height: 46px;">
+          <span class="material-symbols-outlined" style="font-size: 18px;">add_circle</span>
+          新規カテゴリを追加する
+        </button>
+      </div>
+
+      <!-- App Diagnostics Card -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-cyan);">info</span>
+          システム情報
+        </h3>
+        <div class="detail-item">
+          <span class="detail-label">連携スプレッドシート</span>
+          <span class="detail-val">
+            <a id="settings-spreadsheet-link" href="#" target="_blank" style="color: var(--accent-cyan); text-decoration: none; display: flex; align-items: center; gap: 4px;">
+              開く <span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span>
+            </a>
+          </span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">データ保管状態</span>
+          <span class="detail-val" style="color: var(--accent-emerald);">正常接続中</span>
+        </div>
+        <div class="detail-item" style="border: none;">
+          <span class="detail-label">実行ユーザー権限</span>
+          <span id="settings-user-role" class="detail-val">制限付きメンバー</span>
+        </div>
+      </div>
+
+      <!-- 4. Group Switcher Card (NEW) -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-amber);">swap_horiz</span>
+          精算グループの切り替え
+        </h3>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
+          別のスプレッドシートを開くか、新しく精算シートを自動作成します。
+        </p>
+        <button onclick="resetToOnboarding();" class="btn btn-secondary" style="width: 100%; height: 46px;">
+          <span class="material-symbols-outlined" style="font-size: 18px;">settings_backup_restore</span>
+          別のシートを開く / 新規作成
+        </button>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="nav-panel">
+      <button class="nav-item active" onclick="switchTab('dashboard', this)">
+        <span class="material-symbols-outlined">dashboard</span>
+        ダッシュボード
+      </button>
+      <button class="nav-item" onclick="switchTab('add', this)">
+        <span class="material-symbols-outlined">add_circle</span>
+        登録
+      </button>
+      <button class="nav-item" onclick="switchTab('history', this)">
+        <span class="material-symbols-outlined">history</span>
+        履歴・一覧
+      </button>
+      <button class="nav-item" onclick="switchTab('settings', this)">
+        <span class="material-symbols-outlined">settings</span>
+        設定
+      </button>
+    </nav>
+  </div>
+
+  <!-- 3. ACCESS DENIED / ERROR PAGE (Hidden by default, shown if GAS error occurs) -->
+  <div id="access-denied-page" style="display: none;">
+    <div class="access-denied-container">
+      <div class="error-shield">
+        <span class="material-symbols-outlined" style="font-size: 80px;">gpp_bad</span>
+      </div>
+      <h2 style="font-family: var(--font-heading); font-size: 24px; margin-bottom: 12px;">エラーが発生しました</h2>
+      <p id="access-denied-message" style="color: var(--text-secondary); max-width: 360px; margin-bottom: 24px; font-size: 14px; line-height: 1.6;">
+        スプレッドシートの取得に失敗しました。URLパラメータが正しいか、またはスプレッドシートの閲覧権限があることを確認してください。
+      </p>
+      <div style="width: 100%; max-width: 280px; display: flex; flex-direction: column; gap: 12px; margin: 0 auto;">
+        <button onclick="window.location.reload();" class="btn btn-primary">
+          <span class="material-symbols-outlined">sync</span>
+          再読み込みする
+        </button>
+        <button onclick="resetToOnboarding();" class="btn btn-secondary">
+          <span class="material-symbols-outlined">settings_backup_restore</span>
+          最初から設定し直す
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EXPENSE DETAILS DRAWER -->
+  <div id="expense-modal" class="modal-overlay" onclick="closeExpenseModal(event)">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-expense-title">立替詳細</h3>
+        <button class="modal-close" onclick="toggleModal('expense-modal', false)">×</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="detail-item">
+          <span class="detail-label">日付</span>
+          <span id="detail-date" class="detail-val">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">支払った人</span>
+          <span id="detail-payer" class="detail-val">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">金額</span>
+          <span id="detail-amount" class="detail-val" style="font-size: 18px; color: var(--accent-indigo); font-family: var(--font-heading);">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">カテゴリ</span>
+          <span id="detail-category" class="detail-val">-</span>
+        </div>
+        <div class="detail-item" style="border-bottom: none;">
+          <span class="detail-label">メモ</span>
+          <span id="detail-description" class="detail-val">-</span>
+        </div>
+      </div>
+      
+      <input type="hidden" id="detail-id">
+      
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" onclick="toggleModal('expense-modal', false)">閉じる</button>
+        <button id="btn-delete-expense" class="btn btn-danger" onclick="confirmDeleteExpense()">
+          <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+          削除する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIRM SETTLEMENT -->
+  <div id="settle-modal" class="modal-overlay" onclick="closeSettleModal(event)">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>精算の確定</h3>
+        <button class="modal-close" onclick="toggleModal('settle-modal', false)">×</button>
+      </div>
+      <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.6;">
+        これまでに登録された全ての未精算データ（立替費用）を精算済みにします。
+        精算を確定して、履歴に記録しますか？
+      </p>
+      
+      <div id="modal-settle-summary-box" class="settlement-card-details" style="margin-bottom: 20px; font-weight: 500;">
+        <!-- Filled dynamically -->
+      </div>
+      
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" onclick="toggleModal('settle-modal', false)">キャンセル</button>
+        <button id="btn-confirm-settlement" class="btn btn-primary" onclick="executeSettlement()">
+          <span class="material-symbols-outlined" style="font-size: 18px;">price_check</span>
+          確定する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CATEGORY EDITOR -->
+  <div id="category-modal" class="modal-overlay" onclick="closeCategoryModal(event)">
+    <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h3 id="category-modal-title">カテゴリの設定</h3>
+        <button class="modal-close" onclick="toggleModal('category-modal', false)">×</button>
+      </div>
+      
+      <form id="category-form" onsubmit="event.preventDefault(); saveCategoryFromForm();">
+        <input type="hidden" id="category-edit-id">
+        
+        <!-- Category Name & Emoji -->
+        <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+          <div style="flex: 1;">
+            <label class="form-label" style="font-size: 11px;">絵文字</label>
+            <input type="text" id="category-input-emoji" class="form-input" placeholder="👥" required style="text-align: center; font-size: 18px; padding: 6px;">
+          </div>
+          <div style="flex: 4;">
+            <label class="form-label" style="font-size: 11px;">カテゴリ名</label>
+            <input type="text" id="category-input-name" class="form-input" placeholder="割り勘" required>
+          </div>
+        </div>
+        
+        <!-- Split Ratios Section -->
+        <div id="category-ratio-section" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-bottom: 20px;">
+          <h4 style="font-size: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <span>メンバーの負担割合 (%)</span>
+            <span id="category-ratio-sum-badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 700;">合計: 0%</span>
+          </h4>
+          <div id="category-ratio-sliders-container" style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Injected by JS based on active members -->
+          </div>
+        </div>
+        
+        <div class="modal-buttons" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 0;">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('category-modal', false)">キャンセル</button>
+          <button type="submit" id="btn-save-category" class="btn btn-primary">
+            <span class="material-symbols-outlined">save</span>
+            保存する
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MEMBER EDITOR (NEW) -->
+  <div id="member-modal" class="modal-overlay" onclick="closeMemberModal(event)">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="member-modal-title">メンバーの設定</h3>
+        <button class="modal-close" onclick="toggleModal('member-modal', false)">×</button>
+      </div>
+      
+      <form id="member-form" onsubmit="event.preventDefault(); saveMemberFromForm();">
+        <input type="hidden" id="member-edit-index">
+        <input type="hidden" id="member-original-name">
+        
+        <!-- Member Name -->
+        <div class="form-group">
+          <label class="form-label">名前</label>
+          <input type="text" id="member-input-name" class="form-input" placeholder="友人A" required>
+        </div>
+        
+        <!-- Member Email (Optional) -->
+        <div class="form-group">
+          <label class="form-label">メールアドレス（任意）</label>
+          <input type="email" id="member-input-email" class="form-input" placeholder="friend@example.com">
+          <p style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">
+            ※メールアドレスを入力すると、そのユーザーがWebアプリにアクセスした際に自動判別されます。
+          </p>
+        </div>
+        
+        <!-- Member Theme Color -->
+        <div class="form-group">
+          <label class="form-label">テーマカラー</label>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">
+            <input type="color" id="member-input-color" class="form-input" style="width: 50px; height: 40px; padding: 2px; cursor: pointer; border-radius: 8px;" value="#6366f1">
+            <span style="font-size: 12px; color: var(--text-secondary);">メンバーのアイコンやゲージに反映されます。</span>
+          </div>
+        </div>
+        
+        <div class="modal-buttons" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('member-modal', false)">キャンセル</button>
+          <button type="submit" id="btn-save-member" class="btn btn-primary">
+            <span class="material-symbols-outlined">save</span>
+            保存する
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Variable Injection from GAS server to client -->
+  <script>
+    const SPREADSHEET_ID = "<?= spreadsheetId ?>";
+  </script>
+
+  <!-- Server-side template inclusion of JavaScript -->
+  <script>
+/**
+ * DivvPay - Front-End Controller (javascript.html)
+ * Premium dynamic interactions & Mock service mode (Without savings reimbursement feature)
+ */
+
+// Global high-visibility error boundary catcher
+window.onerror = function(message, source, lineno, colno, error) {
+  const errMsg = `フロントエラー: ${message} (行: ${lineno})`;
+  console.error(errMsg, error);
+  const toast = document.getElementById('toast');
+  if (toast) {
+    toast.textContent = errMsg;
+    toast.style.border = '1px solid var(--accent-rose)';
+    toast.style.background = 'rgba(244, 63, 94, 0.15)';
+    toast.style.color = '#fda4af';
+    toast.classList.add('active');
+  }
+  return false;
+};
+
+// Global state
+let state = {
+  user: { email: 'guest@example.com', name: '自分', color: '#6366f1', isAdmin: true },
+  expenses: [],
+  settlements: [],
+  members: [],
+  categories: [],
+  spreadsheetUrl: '#',
+  spreadsheetName: 'DivvPay スプレッドシート'
+};
+
+let currentHistorySegment = 'unsettled';
+let activeFormPayer = '';
+let categoryToSettle = '';
+
+// Check if running locally in a web browser
+const isLocal = window.location.hostname.indexOf('google') === -1;
+
+// Determine active Spreadsheet ID robustly for both GAS and Local environments
+let activeSsId = '';
+if (isLocal) {
+  // Local environment: Parse ID directly from URL query parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  activeSsId = urlParams.get('id') || urlParams.get('ssId') || urlParams.get('spreadsheetId') || urlParams.get('ss') || '';
+} else {
+  // GAS environment: Use the injected SPREADSHEET_ID from templating (if evaluated)
+  const isTemplateString = SPREADSHEET_ID.startsWith('<?') || SPREADSHEET_ID.startsWith('%=');
+  activeSsId = isTemplateString ? '' : SPREADSHEET_ID;
+}
+
+/**
+ * MOCK APPS SCRIPT API (Runs strictly in local environment for testing)
+ */
+const mockApiSuccess = (res, handler) => setTimeout(() => handler(res), 400);
+
+const localBackendMock = {
+  getInitialData: function(spreadsheetId, success, failure) {
+    const memKey = `divvpay_members_${spreadsheetId}`;
+    const catKey = `divvpay_categories_${spreadsheetId}`;
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    const setKey = `divvpay_settlements_${spreadsheetId}`;
+
+    if (!localStorage.getItem(memKey)) {
+      localStorage.setItem(memKey, JSON.stringify([
+        { name: '自分', email: 'me@example.com', color: '#6366f1' },
+        { name: '友人A', email: 'friend.a@example.com', color: '#ec4899' },
+        { name: '友人B', email: '', color: '#10b981' }
+      ]));
+    }
+    if (!localStorage.getItem(catKey)) {
+      localStorage.setItem(catKey, JSON.stringify([
+        { id: 'cat_1', name: '割り勘（均等）', emoji: '👥', split_rules: '{"自分":34,"友人A":33,"友人B":33}' },
+        { id: 'cat_2', name: '食事代', emoji: '🍔', split_rules: '{"自分":50,"友人A":50,"友人B":0}' },
+        { id: 'cat_3', name: '交通費', emoji: '🚕', split_rules: '{"自分":0,"友人A":100,"友人B":0}' }
+      ]));
+    }
+    if (!localStorage.getItem(expKey)) {
+      localStorage.setItem(expKey, JSON.stringify([
+        { id: 'exp_1', date: new Date().toISOString().split('T')[0], payer: '自分', amount: 4500, category: 'cat_1', description: 'みんなのランチ代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() },
+        { id: 'exp_2', date: new Date().toISOString().split('T')[0], payer: '友人A', amount: 3000, category: 'cat_2', description: 'カフェ・お茶代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() }
+      ]));
+    }
+    if (!localStorage.getItem(setKey)) {
+      localStorage.setItem(setKey, JSON.stringify([]));
+    }
+
+    const res = {
+      success: true,
+      user: { email: 'me@example.com', name: '自分', color: '#6366f1', isAdmin: true },
+      expenses: JSON.parse(localStorage.getItem(expKey)),
+      settlements: JSON.parse(localStorage.getItem(setKey)),
+      members: JSON.parse(localStorage.getItem(memKey)),
+      categories: JSON.parse(localStorage.getItem(catKey)),
+      spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/edit',
+      spreadsheetName: '【開発用Mock】' + (localStorage.getItem('divvpay_mock_name_' + spreadsheetId) || '旅行の割り勘精算')
+    };
+    mockApiSuccess(res, success);
+  },
+  
+  addExpense: function(spreadsheetId, expense, success, failure) {
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    const expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
+    const id = 'exp_' + new Date().getTime();
+    expense.id = id;
+    expense.status = 'unsettled';
+    expense.settlement_id = '';
+    expense.created_at = new Date().toISOString();
+    expenses.push(expense);
+    localStorage.setItem(expKey, JSON.stringify(expenses));
+    
+    mockApiSuccess({ success: true, expenseId: id }, success);
+  },
+
+  deleteExpense: function(spreadsheetId, id, success, failure) {
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    let expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
+    expenses = expenses.filter(e => e.id !== id);
+    localStorage.setItem(expKey, JSON.stringify(expenses));
+    
+    mockApiSuccess({ success: true }, success);
+  },
+
+  settleExpenses: function(spreadsheetId, settlerName, categoryId, success, failure) {
+    const memKey = `divvpay_members_${spreadsheetId}`;
+    const catKey = `divvpay_categories_${spreadsheetId}`;
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    const setKey = `divvpay_settlements_${spreadsheetId}`;
+
+    const expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
+    const members = JSON.parse(localStorage.getItem(memKey) || '[]');
+    const categories = JSON.parse(localStorage.getItem(catKey) || '[]');
+    const settlements = JSON.parse(localStorage.getItem(setKey) || '[]');
+    
+    const unsettled = expenses.filter(e => {
+      const matchCat = !categoryId || e.category === categoryId;
+      return e.status === 'unsettled' && matchCat;
+    });
+    
+    if (unsettled.length === 0) {
+      setTimeout(() => failure(new Error('未精算の立替がありません。')), 300);
+      return;
+    }
+    
+    const calculation = calculateClientSettlement(unsettled, members, categories);
+    
+    // Mark settled
+    expenses.forEach(e => {
+      const matchCat = !categoryId || e.category === categoryId;
+      if (e.status === 'unsettled' && matchCat) {
+        e.status = 'settled';
+        e.settlement_id = 'set_' + new Date().getTime();
+      }
+    });
+    localStorage.setItem(expKey, JSON.stringify(expenses));
+    
+    let detailsText = calculation.text;
+    const cat = categories.find(c => c.id === categoryId);
+    if (cat) {
+      detailsText = `【精算対象：${cat.emoji} ${cat.name}】\n` + detailsText;
+    }
+    
+    const settlementId = 'set_' + new Date().getTime();
+    const newSettlement = {
+      id: settlementId,
+      date: new Date().toLocaleDateString('ja-JP'),
+      settler: settlerName || 'システム',
+      total_amount: calculation.total,
+      details: detailsText,
+      created_at: new Date().toISOString()
+    };
+    settlements.push(newSettlement);
+    localStorage.setItem(setKey, JSON.stringify(settlements));
+    
+    mockApiSuccess({
+      success: true,
+      settlement: newSettlement
+    }, success);
+  },
+
+  saveCategory: function(spreadsheetId, category, success, failure) {
+    const catKey = `divvpay_categories_${spreadsheetId}`;
+    const categories = JSON.parse(localStorage.getItem(catKey) || '[]');
+    if (!category.id) {
+      category.id = 'cat_' + new Date().getTime();
+      categories.push(category);
+    } else {
+      const idx = categories.findIndex(c => c.id === category.id);
+      if (idx !== -1) {
+        categories[idx] = category;
+      }
+    }
+    localStorage.setItem(catKey, JSON.stringify(categories));
+    mockApiSuccess({ success: true, id: category.id }, success);
+  },
+
+  deleteCategory: function(spreadsheetId, id, success, failure) {
+    const catKey = `divvpay_categories_${spreadsheetId}`;
+    let categories = JSON.parse(localStorage.getItem(catKey) || '[]');
+    categories = categories.filter(c => c.id !== id);
+    localStorage.setItem(catKey, JSON.stringify(categories));
+    mockApiSuccess({ success: true }, success);
+  },
+
+  saveMemberSettings: function(spreadsheetId, members, success, failure) {
+    const memKey = `divvpay_members_${spreadsheetId}`;
+    localStorage.setItem(memKey, JSON.stringify(members));
+    mockApiSuccess({ success: true }, success);
+  }
+};
+
+// Create Google Script Simulator to mimic chainable syntax
+const googleMock = {
+  script: {
+    run: {
+      withSuccessHandler: function(successHandler) {
+        return {
+          withFailureHandler: function(failureHandler) {
+            const runner = {};
+            Object.keys(localBackendMock).forEach(methodName => {
+              runner[methodName] = function(...args) {
+                // First argument spreadsheetId is already prepended by the caller
+                localBackendMock[methodName](...args, successHandler, failureHandler);
+              };
+            });
+            return runner;
+          }
+        };
+      }
+    }
+  }
+};
+
+// Routing client API
+const api = isLocal ? googleMock.script.run : google.script.run;
+
+/**
+ * INITIALIZATION
+ */
+window.addEventListener('DOMContentLoaded', () => {
+  // Set default date to today
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('input-date').value = today;
+  
+  // Form submission setup
+  document.getElementById('expense-form').addEventListener('submit', registerExpense);
+  
+  // Modal buttons setup
+  document.getElementById('btn-open-settle-modal').addEventListener('click', () => openSettlementConfirmModal(''));
+  
+  // Initialize application view states
+  if (!activeSsId) {
+    // Show Onboarding screen
+    document.getElementById('onboarding-view').style.display = 'flex';
+  } else {
+    // Show Main app screen and load data
+    document.getElementById('main-app-view').style.display = 'block';
+    loadApplicationData();
+  }
+});
+
+/**
+ * ONBOARDING URL PARSING & REDIRECT
+ */
+function extractSpreadsheetId(input) {
+  if (!input) return '';
+  const trimmed = input.trim();
+  // Standard spreadsheet URL: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit...
+  const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]{44})/);
+  if (match) {
+    return match[1];
+  }
+  // Otherwise try to see if it's a raw 44-character ID
+  if (trimmed.length === 44 && /^[a-zA-Z0-9-_]+$/.test(trimmed)) {
+    return trimmed;
+  }
+  return '';
+}
+
+function launchFromOnboarding() {
+  const input = document.getElementById('onboarding-ss-input').value;
+  const parsedId = extractSpreadsheetId(input);
+  
+  if (!parsedId) {
+    showToast('有効なスプレッドシートの URL または ID を入力してください。');
+    return;
+  }
+  
+  const launchBtn = document.getElementById('btn-launch-onboarding');
+  launchBtn.disabled = true;
+  launchBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 起動中...';
+  
+  // Reload page with parameter (Safe for local file:// protocol)
+  window.location.search = '?id=' + parsedId;
+}
+
+function switchOnboardTab(tab) {
+  const isNew = tab === 'new';
+  document.getElementById('seg-onboard-new').classList.toggle('active', isNew);
+  document.getElementById('seg-onboard-connect').classList.toggle('active', !isNew);
+  
+  document.getElementById('onboard-tab-new').style.display = isNew ? 'block' : 'none';
+  document.getElementById('onboard-tab-connect').style.display = isNew ? 'none' : 'block';
+}
+
+function createNewSheetFromOnboarding() {
+  const nameInput = document.getElementById('onboarding-name-input');
+  const name = nameInput ? nameInput.value.trim() : '';
+  
+  if (!name) {
+    showToast('イベント名を入力してください');
+    return;
+  }
+  
+  const createBtn = document.getElementById('btn-create-sheet-onboarding');
+  const originalHtml = createBtn.innerHTML;
+  createBtn.disabled = true;
+  createBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 作成中...';
+  
+  if (isLocal) {
+    // Local mock spreadsheet creation
+    setTimeout(() => {
+      const mockId = 'mock-' + Math.random().toString(36).substr(2, 9);
+      // Save custom name to mock store
+      localStorage.setItem('divvpay_mock_name_' + mockId, name);
+      showToast('【開発Mock】精算シート「' + name + '」を作成しました！');
+      window.location.search = '?id=' + mockId;
+    }, 1000);
+    return;
+  }
+  
+  api.withSuccessHandler(res => {
+    createBtn.disabled = false;
+    createBtn.innerHTML = originalHtml;
+    
+    if (res && res.success) {
+      showToast('精算スプレッドシート「' + name + '」を作成しました！');
+      // Redirect to the new spreadsheet ID (Safe for local file:// protocol)
+      window.location.search = '?id=' + res.id;
+    } else {
+      showToast(res ? res.error : 'スプレッドシートの作成に失敗しました。');
+    }
+  }).withFailureHandler(err => {
+    createBtn.disabled = false;
+    createBtn.innerHTML = originalHtml;
+    showToast('エラーが発生しました: ' + err.message);
+  }).createNewSpreadsheet(name);
+}
+
+function resetToOnboarding() {
+  // Clear search query to return to onboarding (Safe for local file:// protocol)
+  window.location.search = '';
+}
+
+/**
+ * DATA ACQUISITION
+ */
+function loadApplicationData() {
+  api.withSuccessHandler(response => {
+    if (response && response.success) {
+      state.user = response.user;
+      state.expenses = response.expenses || [];
+      state.settlements = response.settlements || [];
+      state.members = response.members || [];
+      state.categories = response.categories || [];
+      state.spreadsheetUrl = response.spreadsheetUrl;
+      state.spreadsheetName = response.spreadsheetName || 'DivvPay スプレッドシート';
+      
+      // Update UI elements
+      document.getElementById('header-user-email').textContent = `${state.user.email || 'スプレッドシート共有メンバー'} (${state.user.name || 'ゲスト'})`;
+      document.getElementById('settings-spreadsheet-link').href = state.spreadsheetUrl;
+      document.getElementById('settings-user-role').textContent = isLocal ? 'ローカル開発Mockモード' : `GAS 共有ユーザー (${state.user.name})`;
+      
+      // Update dynamic spreadsheet title
+      const spreadsheetNameEl = document.getElementById('spreadsheet-name');
+      if (spreadsheetNameEl) {
+        spreadsheetNameEl.textContent = state.spreadsheetName;
+      }
+      
+      // Auto-set form active payer to current user if matches, otherwise the first member
+      const matchingMember = state.members.find(m => m.email && state.user.email && m.email.toLowerCase().trim() === state.user.email.toLowerCase().trim());
+      activeFormPayer = matchingMember ? matchingMember.name : (state.members[0] ? state.members[0].name : '');
+      
+      renderPayerSelectorGrid();
+      renderCategorySelectorGrid();
+      renderDashboard();
+      renderExpenseHistory();
+      renderSettingsMembers();
+      renderSettingsCategories();
+    } else {
+      const errorMsg = response ? response.error : 'サーバーからのレスポンスが空です。\n\n【原因の可能性】\n1. Google Apps Scriptの初回実行に伴う承認（アクセス許可）が完了していない。\n2. スプレッドシートIDが間違っている、または閲覧権限がない。\n\n【対策】\nスプレッドシートのメニュー「拡張機能」＞「Apps Script」から、一度手動で「getInitialData」を実行し、画面上の許可ポップアップで承認を行ってください。その後、本アプリを再読み込みしてください。';
+      showErrorPage(errorMsg);
+    }
+  }).withFailureHandler(err => {
+    showErrorPage(err ? err.message : 'サーバー通信エラーが発生しました。');
+  }).getInitialData(activeSsId);
+}
+
+/**
+ * NAVIGATION (SPA ROUTER)
+ */
+function switchTab(tabId, el) {
+  // Toggle Active Content
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.style.display = 'none';
+  });
+  const targetTab = document.getElementById('tab-' + tabId);
+  if (targetTab) {
+    targetTab.style.display = 'block';
+  }
+  
+  // Toggle Navigation active states
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.classList.remove('active');
+  });
+  el.classList.add('active');
+}
+
+function switchHistorySegment(segment) {
+  currentHistorySegment = segment;
+  document.getElementById('seg-unsettled').classList.toggle('active', segment === 'unsettled');
+  document.getElementById('seg-settled').classList.toggle('active', segment === 'settled');
+  
+  renderExpenseHistory();
+}
+
+/**
+ * CLIENT-SIDE SETTLEMENT ALGORITHM (No savings reimbursement feature)
+ */
+function calculateClientSettlement(unsettled, members, categories) {
+  const total = unsettled.reduce((sum, e) => sum + Number(e.amount), 0);
+  if (unsettled.length === 0) {
+    return { total: 0, transfers: [], text: '未精算の立替はありません。' };
+  }
+  
+  const cats = categories || state.categories || [];
+  const mems = members || state.members || [];
+  
+  const balances = {};
+  mems.forEach(m => {
+    balances[m.name] = 0;
+  });
+  
+  unsettled.forEach(e => {
+    const amt = Number(e.amount);
+    const payer = e.payer;
+    
+    // Find category
+    const cat = cats.find(c => c.id === e.category || c.name === e.category);
+    let ratios = {};
+    if (!cat) {
+      // equal split fallback
+      mems.forEach(m => {
+        ratios[m.name] = 100 / mems.length;
+      });
+    } else {
+      try {
+        ratios = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
+      } catch (err) {
+        mems.forEach(m => {
+          ratios[m.name] = 100 / mems.length;
+        });
+      }
+    }
+    
+    if (balances[payer] !== undefined) {
+      balances[payer] += amt;
+    }
+    
+    mems.forEach(m => {
+      const ratio = Number(ratios[m.name]) || 0;
+      const share = amt * (ratio / 100);
+      if (balances[m.name] !== undefined) {
+        balances[m.name] -= share;
+      }
+    });
+  });
+  
+  const transfers = [];
+  const debtors = [];
+  const creditors = [];
+  
+  mems.forEach(m => {
+    const bal = Math.round(balances[m.name]);
+    if (bal < -0.1) {
+      debtors.push({ name: m.name, amount: -bal });
+    } else if (bal > 0.1) {
+      creditors.push({ name: m.name, amount: bal });
+    }
+  });
+  
+  let debtIdx = 0;
+  let credIdx = 0;
+  while (debtIdx < debtors.length && credIdx < creditors.length) {
+    const debtor = debtors[debtIdx];
+    const creditor = creditors[credIdx];
+    
+    const transAmt = Math.min(debtor.amount, creditor.amount);
+    if (transAmt > 0.1) {
+      transfers.push({
+        from: debtor.name,
+        to: creditor.name,
+        amount: Math.round(transAmt),
+        text: `${debtor.name} ➔ ${creditor.name} : ${Math.round(transAmt).toLocaleString()}円`
+      });
+    }
+    
+    debtor.amount -= transAmt;
+    creditor.amount -= transAmt;
+    
+    if (debtor.amount < 0.1) debtIdx++;
+    if (creditor.amount < 0.1) credIdx++;
+  }
+  
+  let text = '';
+  if (transfers.length === 0) {
+    text = '相殺により全員の支払額が均衡しています。送金の必要はありません。';
+  } else {
+    text = transfers.map(t => t.text).join('\n');
+  }
+  
+  return { total, transfers, text };
+}
+
+/**
+ * RENDERING FUNCTIONS
+ */
+function renderPayerSelectorGrid() {
+  const container = document.getElementById('form-payer-grid');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.members.length === 0) {
+    container.innerHTML = '<div style="color: var(--text-secondary); grid-column: 1/-1; text-align: center; font-size: 13px;">メンバーを先に設定してください。</div>';
+    return;
+  }
+  
+  state.members.forEach(m => {
+    const pill = document.createElement('div');
+    pill.className = 'pill-option';
+    if (m.name === activeFormPayer) {
+      pill.classList.add('active');
+      pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
+      pill.style.borderColor = m.color;
+    }
+    pill.dataset.payerName = m.name;
+    pill.style.setProperty('--shadow-color', m.color + '40');
+    
+    pill.innerHTML = `
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: ${m.color}; display: inline-block;"></span>
+      <span>${escapeHTML(m.name)}</span>
+    `;
+    
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.pill-option').forEach(el => {
+        el.classList.remove('active');
+        el.style.background = '';
+        el.style.borderColor = '';
+      });
+      pill.classList.add('active');
+      pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
+      pill.style.borderColor = m.color;
+      activeFormPayer = m.name;
+    });
+    
+    container.appendChild(pill);
+  });
+}
+
+function renderCategorySelectorGrid() {
+  const grid = document.getElementById('form-category-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  
+  if (state.categories.length === 0) {
+    grid.innerHTML = '<div style="color: var(--text-secondary); grid-column: 1/-1; text-align: center; padding: 12px; font-size: 13px;">カテゴリが登録されていません。設定から追加してください。</div>';
+    return;
+  }
+  
+  state.categories.forEach((cat, index) => {
+    const opt = document.createElement('div');
+    opt.className = 'category-option';
+    if (index === 0) opt.classList.add('active');
+    opt.dataset.categoryId = cat.id;
+    opt.innerHTML = `
+      <span class="cat-icon">${escapeHTML(cat.emoji || '📂')}</span>
+      <span>${escapeHTML(cat.name)}</span>
+    `;
+    opt.addEventListener('click', () => {
+      document.querySelectorAll('.category-option').forEach(el => el.classList.remove('active'));
+      opt.classList.add('active');
+    });
+    grid.appendChild(opt);
+  });
+}
+
+function renderDashboard() {
+  const unsettled = state.expenses.filter(e => e.status === 'unsettled');
+  const calculation = calculateClientSettlement(unsettled, state.members, state.categories);
+  
+  // Set Total Amount
+  document.getElementById('dashboard-total').textContent = calculation.total.toLocaleString() + '円';
+  
+  // Set transfer text
+  const box = document.getElementById('dashboard-settlement-path');
+  const textEl = document.getElementById('dashboard-settlement-text');
+  
+  if (unsettled.length === 0) {
+    box.style.border = '1px solid rgba(255,255,255,0.05)';
+    box.style.background = 'rgba(255,255,255,0.02)';
+    textEl.innerHTML = '<span style="color: var(--text-secondary)">未精算の立替は現在ありません。とてもクリーンな状態です！</span>';
+    document.getElementById('btn-open-settle-modal').disabled = true;
+  } else {
+    box.style.border = '1px solid rgba(99, 102, 241, 0.2)';
+    box.style.background = 'rgba(99, 102, 241, 0.08)';
+    document.getElementById('btn-open-settle-modal').disabled = false;
+    
+    const formattedText = calculation.text.split('\n').map(line => {
+      return `<div style="font-size: 15px; font-weight: 600; margin-bottom: 4px; font-family: var(--font-heading); color: #fff;">${line}</div>`;
+    }).join('');
+    
+    textEl.innerHTML = `<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase;">精算に必要な送金ルート</div>${formattedText}`;
+  }
+  
+  // Render Category stats
+  const catStatsContainer = document.getElementById('category-stats');
+  catStatsContainer.innerHTML = '';
+  
+  if (unsettled.length === 0) {
+    catStatsContainer.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🎉</div>
+        <p style="font-size: 14px;">立替データはありません</p>
+      </div>`;
+    return;
+  }
+  
+  // Group categories
+  const catSum = {};
+  let maxCatAmount = 0;
+  
+  unsettled.forEach(e => {
+    const catId = e.category || 'cat_other';
+    catSum[catId] = (catSum[catId] || 0) + Number(e.amount);
+    if (catSum[catId] > maxCatAmount) maxCatAmount = catSum[catId];
+  });
+  
+  Object.keys(catSum).sort((a,b) => catSum[b] - catSum[a]).forEach(catId => {
+    const amount = catSum[catId];
+    const percentage = maxCatAmount > 0 ? (amount / maxCatAmount) * 100 : 0;
+    
+    // Find category info
+    const cat = state.categories.find(c => c.id === catId || c.name === catId);
+    const catName = cat ? cat.name : 'その他';
+    const catEmoji = cat ? cat.emoji : '📂';
+    
+    const row = document.createElement('div');
+    row.className = 'category-stat-row';
+    row.innerHTML = `
+      <div class="category-stat-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <span>${catEmoji} ${catName}</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-family: var(--font-heading); font-weight: 700; font-size: 14px;">${amount.toLocaleString()}円</span>
+          <button class="btn btn-settle-cat" style="width: auto; padding: 6px 14px; font-size: 11px; border-radius: 20px; background: linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan)); color: white; border: none; box-shadow: 0 0 10px rgba(6, 182, 212, 0.45); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;" onclick="openSettlementConfirmModal('${catId}')">
+            <span class="material-symbols-outlined" style="font-size: 13px;">price_check</span>
+            精算
+          </button>
+        </div>
+      </div>
+      <div class="category-progress-bg" style="margin-top: 6px;">
+        <div class="category-progress-bar" style="width: 0%;"></div>
+      </div>
+    `;
+    catStatsContainer.appendChild(row);
+    
+    // Smooth progress fill trigger
+    setTimeout(() => {
+      const bar = row.querySelector('.category-progress-bar');
+      if (bar) bar.style.width = `${percentage}%`;
+    }, 100);
+  });
+}
+
+function renderExpenseHistory() {
+  const expContainer = document.getElementById('expense-list-container');
+  const setContainer = document.getElementById('settlement-list-container');
+  
+  if (currentHistorySegment === 'unsettled') {
+    expContainer.style.display = 'flex';
+    setContainer.style.display = 'none';
+    expContainer.innerHTML = '';
+    
+    const unsettled = state.expenses
+      .filter(e => e.status === 'unsettled')
+      .sort((a,b) => new Date(b.date) - new Date(a.date) || new Date(b.created_at) - new Date(a.created_at));
+      
+    if (unsettled.length === 0) {
+      expContainer.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">📄</div>
+          <p>未精算のデータはありません</p>
+        </div>`;
+      return;
+    }
+    
+    unsettled.forEach(e => {
+      const card = document.createElement('div');
+      card.className = 'expense-card';
+      
+      // Match member details
+      const member = state.members.find(m => m.name === e.payer) || { color: '#6366f1' };
+      
+      // Find category details
+      const cat = state.categories.find(c => c.id === e.category || c.name === e.category);
+      const categoryLabel = cat ? `${cat.emoji} ${cat.name}` : e.category;
+      
+      card.innerHTML = `
+        <div class="expense-card-left">
+          <div class="payer-avatar" style="background: rgba(${hexToRgb(member.color)}, 0.12); border-color: ${member.color}; color: ${member.color}; font-weight: 700;">
+            ${e.payer.charAt(0)}
+          </div>
+          <div class="expense-details">
+            <div class="expense-title-row">
+              <span class="expense-memo">${escapeHTML(e.description) || '立替費用'}</span>
+              <span class="expense-category-tag">${escapeHTML(categoryLabel)}</span>
+            </div>
+            <span class="expense-date">${formatDateStr(e.date)}</span>
+          </div>
+        </div>
+        <div class="expense-card-right">
+          <span class="expense-amount">${Number(e.amount).toLocaleString()}円</span>
+          <span class="expense-payer-name">${e.payer}立替</span>
+        </div>
+      `;
+      
+      card.addEventListener('click', () => openExpenseDetailDrawer(e));
+      expContainer.appendChild(card);
+    });
+    
+  } else {
+    // Settled History Segment
+    expContainer.style.display = 'none';
+    setContainer.style.display = 'flex';
+    setContainer.innerHTML = '';
+    
+    const settlements = [...state.settlements].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    if (settlements.length === 0) {
+      setContainer.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">history</div>
+          <p>過去の精算履歴はありません</p>
+        </div>`;
+      return;
+    }
+    
+    settlements.forEach(s => {
+      const card = document.createElement('div');
+      card.className = 'expense-card';
+      card.style.flexDirection = 'column';
+      card.style.alignItems = 'stretch';
+      card.style.cursor = 'default';
+      card.style.gap = '8px';
+      
+      card.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="material-symbols-outlined" style="color: var(--accent-emerald);">verified</span>
+            <span style="font-weight: 700; font-family: var(--font-heading); font-size: 15px;">精算の完了</span>
+          </div>
+          <span style="font-size: 12px; color: var(--text-muted);">${formatDateStr(s.date)}</span>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-secondary); border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
+          <span>精算総額: <b style="color: white;">${Number(s.total_amount).toLocaleString()}円</b></span>
+          <span>精算者: ${s.settler || 'システム'}</span>
+        </div>
+        
+        <div class="settlement-card-details">
+          ${escapeHTML(s.details)}
+        </div>
+      `;
+      setContainer.appendChild(card);
+    });
+  }
+}
+
+/**
+ * FORM ACTIONS
+ */
+function registerExpense(e) {
+  e.preventDefault();
+  
+  const amount = document.getElementById('input-amount').value;
+  const payer = activeFormPayer;
+  
+  const categoryOption = document.querySelector('.category-option.active');
+  const category = categoryOption ? (categoryOption.dataset.categoryId || categoryOption.dataset.category) : '';
+  
+  const date = document.getElementById('input-date').value;
+  const description = document.getElementById('input-description').value;
+  
+  if (!amount || !payer || !date) {
+    showToast('入力項目を確認してください');
+    return;
+  }
+  
+  const submitBtn = document.getElementById('btn-submit-expense');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 登録中...';
+  
+  const expense = { amount, payer, category, date, description };
+  
+  api.withSuccessHandler(res => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">add_task</span> 立替を登録する';
+    
+    if (res && res.success) {
+      showToast('立替費用を登録しました！');
+      
+      // Reset Form fields
+      document.getElementById('input-amount').value = '';
+      document.getElementById('input-description').value = '';
+      document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+      
+      // Reload data
+      loadApplicationData();
+      
+      // Route back to dashboard
+      const navDash = document.querySelector('.nav-item');
+      switchTab('dashboard', navDash);
+    } else {
+      showToast('登録に失敗しました: ' + (res ? res.error : 'サーバーレスポンスが空です。'));
+    }
+  }).withFailureHandler(err => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">add_task</span> 立替を登録する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).addExpense(activeSsId, expense);
+}
+
+/**
+ * DETAIL DRAWER (MODAL EXPENSE)
+ */
+function openExpenseDetailDrawer(expense) {
+  document.getElementById('detail-id').value = expense.id;
+  document.getElementById('detail-date').textContent = formatDateStr(expense.date);
+  document.getElementById('detail-payer').textContent = expense.payer;
+  document.getElementById('detail-amount').textContent = Number(expense.amount).toLocaleString() + '円';
+  
+  const cat = state.categories.find(c => c.id === expense.category || c.name === expense.category);
+  const categoryLabel = cat ? `${cat.emoji} ${cat.name}` : expense.category;
+  document.getElementById('detail-category').textContent = categoryLabel;
+  
+  document.getElementById('detail-description').textContent = expense.description || '記入なし';
+  
+  toggleModal('expense-modal', true);
+}
+
+function confirmDeleteExpense() {
+  const id = document.getElementById('detail-id').value;
+  if (!id) return;
+  
+  const deleteBtn = document.getElementById('btn-delete-expense');
+  deleteBtn.disabled = true;
+  deleteBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 削除中...';
+  
+  api.withSuccessHandler(res => {
+    deleteBtn.disabled = false;
+    deleteBtn.innerHTML = '<span class="material-symbols-outlined">delete</span> 削除する';
+    toggleModal('expense-modal', false);
+    
+    if (res && res.success) {
+      showToast('立替データを削除しました');
+      loadApplicationData();
+    } else {
+      showToast('削除に失敗しました: ' + (res ? res.error : 'サーバーレスポンスが空です。'));
+    }
+  }).withFailureHandler(err => {
+    deleteBtn.disabled = false;
+    deleteBtn.innerHTML = '<span class="material-symbols-outlined">delete</span> 削除する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).deleteExpense(activeSsId, id);
+}
+
+/**
+ * SETTLEMENT CONFIRMATION MODAL
+ */
+function openSettlementConfirmModal(category) {
+  categoryToSettle = category || '';
+  
+  const unsettled = state.expenses.filter(e => {
+    const matchCat = !categoryToSettle || e.category === categoryToSettle;
+    return e.status === 'unsettled' && matchCat;
+  });
+  
+  if (unsettled.length === 0) {
+    showToast('このカテゴリの未精算データはありません');
+    return;
+  }
+  
+  const calculation = calculateClientSettlement(unsettled, state.members, state.categories);
+  const detailBox = document.getElementById('modal-settle-summary-box');
+  
+  const formattedText = calculation.text.split('\n').map(line => {
+    return `<div style="padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03);">${line}</div>`;
+  }).join('');
+  
+  // Update Modal Title based on selected category
+  let shortTitle = 'すべての出費';
+  if (categoryToSettle) {
+    const matchedCat = state.categories.find(c => c.id === categoryToSettle || c.name === categoryToSettle);
+    if (matchedCat) shortTitle = matchedCat.name;
+  }
+  document.querySelector('#settle-modal h3').textContent = `精算の確定 (${shortTitle})`;
+  
+  detailBox.innerHTML = `
+    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">確定する送金ルート</div>
+    ${formattedText}
+    <div style="margin-top: 10px; text-align: right; font-size: 11px; color: var(--text-muted);">
+      立替件数: ${unsettled.length}件 / 総額: ${calculation.total.toLocaleString()}円
+    </div>
+  `;
+  
+  toggleModal('settle-modal', true);
+}
+
+function executeSettlement() {
+  const settleBtn = document.getElementById('btn-confirm-settlement');
+  settleBtn.disabled = true;
+  settleBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 精算中...';
+  
+  // Identify active user as settler
+  const settlerName = state.user.name || 'メンバー';
+  
+  api.withSuccessHandler(res => {
+    settleBtn.disabled = false;
+    settleBtn.innerHTML = '<span class="material-symbols-outlined">price_check</span> 確定する';
+    toggleModal('settle-modal', false);
+    
+    if (res && res.success) {
+      showToast('精算を確定しました！履歴に記録されました。');
+      loadApplicationData();
+    } else {
+      showToast('精算に失敗しました: ' + (res ? res.error : 'サーバーレスポンスが空です。'));
+    }
+  }).withFailureHandler(err => {
+    settleBtn.disabled = false;
+    settleBtn.innerHTML = '<span class="material-symbols-outlined">price_check</span> 確定する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).settleExpenses(activeSsId, settlerName, categoryToSettle);
+}
+
+/**
+ * GENERIC UI UTILITIES
+ */
+function toggleModal(modalId, show) {
+  const overlay = document.getElementById(modalId);
+  if (!overlay) return;
+  if (show) {
+    overlay.classList.add('active');
+  } else {
+    overlay.classList.remove('active');
+  }
+}
+
+function closeExpenseModal(e) {
+  if (e.target.id === 'expense-modal') toggleModal('expense-modal', false);
+}
+
+function closeSettleModal(e) {
+  if (e.target.id === 'settle-modal') toggleModal('settle-modal', false);
+}
+
+function closeCategoryModal(e) {
+  if (e.target.id === 'category-modal') toggleModal('category-modal', false);
+}
+
+function closeMemberModal(e) {
+  if (e.target.id === 'member-modal') toggleModal('member-modal', false);
+}
+
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('active');
+  
+  setTimeout(() => {
+    toast.classList.remove('active');
+  }, 3500);
+}
+
+function showErrorPage(errMsg) {
+  const mainApp = document.getElementById('main-app-view');
+  if (mainApp) mainApp.style.display = 'none';
+  
+  const errPage = document.getElementById('access-denied-page');
+  if (errPage) errPage.style.display = 'block';
+  
+  const msgEl = document.getElementById('access-denied-message');
+  if (msgEl) {
+    msgEl.innerHTML = escapeHTML(errMsg).replace(/\n/g, '<br>');
+  }
+  console.error("GAS or Spreadsheet error occurred:", errMsg);
+}
+
+/**
+ * MEMBER MANAGEMENT (DYNAMIC MULTI-MEMBER CRUD)
+ */
+function renderSettingsMembers() {
+  const container = document.getElementById('settings-members-list');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.members.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding: 12px;"><p>メンバーが登録されていません</p></div>';
+    return;
+  }
+  
+  state.members.forEach((m, index) => {
+    const card = document.createElement('div');
+    card.className = 'expense-card';
+    card.style.cursor = 'default';
+    card.style.padding = '12px 14px';
+    
+    card.innerHTML = `
+      <div class="expense-card-left" style="gap: 12px; width: 100%;">
+        <div class="payer-avatar" style="background: rgba(${hexToRgb(m.color)}, 0.12); border-color: m.color; color: ${m.color}; font-weight: 700; flex-shrink: 0;">
+          ${escapeHTML(m.name.charAt(0))}
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
+          <div style="font-weight: 600; font-size: 14px;">${escapeHTML(m.name)}</div>
+          <span style="font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${escapeHTML(m.email || 'メール未設定')}
+          </span>
+        </div>
+        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+          <button onclick="openMemberEditModal(${index})" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-indigo)'; this.style.background='rgba(99,102,241,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+          </button>
+          <button onclick="deleteMember(${index})" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-rose)'; this.style.background='rgba(244,63,94,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function openMemberCreateModal() {
+  document.getElementById('member-modal-title').textContent = '新規メンバーの追加';
+  document.getElementById('member-edit-index').value = '';
+  document.getElementById('member-original-name').value = '';
+  document.getElementById('member-input-name').value = '';
+  document.getElementById('member-input-email').value = '';
+  
+  // Choose random default color from nice vibrant hues
+  const colors = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#8b5cf6'];
+  const randomColor = colors[Math.floor(Math.random() * colors.length)];
+  document.getElementById('member-input-color').value = randomColor;
+  
+  toggleModal('member-modal', true);
+}
+
+function openMemberEditModal(index) {
+  const m = state.members[index];
+  if (!m) return;
+  
+  document.getElementById('member-modal-title').textContent = 'メンバーの編集';
+  document.getElementById('member-edit-index').value = index;
+  document.getElementById('member-original-name').value = m.name;
+  document.getElementById('member-input-name').value = m.name;
+  document.getElementById('member-input-email').value = m.email || '';
+  document.getElementById('member-input-color').value = m.color || '#6366f1';
+  
+  toggleModal('member-modal', true);
+}
+
+function saveMemberFromForm() {
+  const indexStr = document.getElementById('member-edit-index').value;
+  const originalName = document.getElementById('member-original-name').value;
+  const name = document.getElementById('member-input-name').value.trim();
+  const email = document.getElementById('member-input-email').value.trim();
+  const color = document.getElementById('member-input-color').value;
+  
+  if (!name) {
+    showToast('名前を入力してください');
+    return;
+  }
+  
+  // Validate duplicate member names
+  const duplicate = state.members.find((m, idx) => m.name.toLowerCase() === name.toLowerCase() && idx.toString() !== indexStr);
+  if (duplicate) {
+    showToast('同じ名前のメンバーが既に存在します。異なる名前にしてください。');
+    return;
+  }
+  
+  const updatedMembers = [...state.members];
+  const newMember = { name, email, color };
+  
+  if (indexStr === '') {
+    // Add new member
+    updatedMembers.push(newMember);
+  } else {
+    // Update existing member
+    const index = parseInt(indexStr, 10);
+    updatedMembers[index] = newMember;
+  }
+  
+  // Prepare Category splits healing
+  // If a member name was changed, we must update all category split rules mapping from originalName to name!
+  if (originalName && originalName !== name) {
+    state.categories.forEach(cat => {
+      let rules = {};
+      try {
+        rules = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
+      } catch (e) {}
+      
+      if (rules && rules[originalName] !== undefined) {
+        rules[name] = rules[originalName];
+        delete rules[originalName];
+        cat.split_rules = rules;
+      }
+    });
+  }
+  
+  const submitBtn = document.getElementById('btn-save-member');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 保存中...';
+  
+  api.withSuccessHandler(res => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    toggleModal('member-modal', false);
+    
+    if (res && res.success) {
+      showToast('メンバー設定を保存しました！');
+      
+      // If name changed, trigger category updates on the server too
+      if (originalName && originalName !== name) {
+        let indexToUpdate = 0;
+        const updateNextCategory = () => {
+          if (indexToUpdate < state.categories.length) {
+            const cat = state.categories[indexToUpdate];
+            api.withSuccessHandler(() => {
+              indexToUpdate++;
+              updateNextCategory();
+            }).withFailureHandler(() => {
+              indexToUpdate++;
+              updateNextCategory();
+            }).saveCategory(activeSsId, cat);
+          } else {
+            loadApplicationData();
+          }
+        };
+        updateNextCategory();
+      } else {
+        loadApplicationData();
+      }
+    } else {
+      showToast('保存に失敗しました: ' + (res ? res.error : '空のレスポンス'));
+    }
+  }).withFailureHandler(err => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).saveMemberSettings(activeSsId, updatedMembers);
+}
+
+function deleteMember(index) {
+  const m = state.members[index];
+  if (!m) return;
+  
+  if (state.members.length <= 2) {
+    showToast('精算のために最低でも2名のメンバーが必要です。');
+    return;
+  }
+  
+  if (!confirm(`本当にメンバー「${m.name}」を削除しますか？\n(注意: 精算計算の整合性を保つため、このメンバーが設定されているカテゴリの負担割合は、残りのメンバーへ均等割り当て等にリセットされます。)`)) {
+    return;
+  }
+  
+  showToast('メンバーを削除中...');
+  const updatedMembers = state.members.filter((_, idx) => idx !== index);
+  
+  // Heal category splits
+  state.categories.forEach(cat => {
+    let rules = {};
+    try {
+      rules = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
+    } catch(e) {}
+    
+    if (rules && rules[m.name] !== undefined) {
+      delete rules[m.name];
+      
+      // Recalculate remaining to sum to 100%
+      let remainingSum = 0;
+      Object.keys(rules).forEach(k => remainingSum += Number(rules[k]));
+      
+      if (remainingSum > 0) {
+        // Distribute proportionally
+        Object.keys(rules).forEach(k => {
+          rules[k] = Math.round((Number(rules[k]) / remainingSum) * 100);
+        });
+        
+        // Correct rounding errors
+        let newSum = 0;
+        Object.keys(rules).forEach(k => newSum += rules[k]);
+        if (newSum !== 100 && Object.keys(rules).length > 0) {
+          const firstKey = Object.keys(rules)[0];
+          rules[firstKey] += (100 - newSum);
+        }
+      } else {
+        // Reset to equal split among remaining members
+        const equalShare = Math.floor(100 / updatedMembers.length);
+        let sum = 0;
+        updatedMembers.forEach((rem, idx) => {
+          if (idx === updatedMembers.length - 1) {
+            rules[rem.name] = 100 - sum;
+          } else {
+            rules[rem.name] = equalShare;
+            sum += equalShare;
+          }
+        });
+      }
+      cat.split_rules = rules;
+    }
+  });
+  
+  api.withSuccessHandler(res => {
+    if (res && res.success) {
+      showToast('メンバーを削除しました！');
+      
+      // Save all updated category configurations on the server
+      let idxToSave = 0;
+      const saveNextCategory = () => {
+        if (idxToSave < state.categories.length) {
+          api.withSuccessHandler(() => {
+            idxToSave++;
+            saveNextCategory();
+          }).withFailureHandler(() => {
+            idxToSave++;
+            saveNextCategory();
+          }).saveCategory(activeSsId, state.categories[idxToSave]);
+        } else {
+          loadApplicationData();
+        }
+      };
+      saveNextCategory();
+    } else {
+      showToast('削除に失敗しました: ' + (res ? res.error : '空のレスポンス'));
+    }
+  }).withFailureHandler(err => {
+    showToast('エラーが発生しました: ' + err.message);
+  }).saveMemberSettings(activeSsId, updatedMembers);
+}
+
+/**
+ * CATEGORY MANAGEMENT (No savings option, dynamic N-member splitting sliders)
+ */
+function renderSettingsCategories() {
+  const container = document.getElementById('settings-categories-list');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.categories.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding: 12px;"><p>カテゴリが登録されていません</p></div>';
+    return;
+  }
+  
+  state.categories.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'expense-card';
+    row.style.cursor = 'default';
+    row.style.padding = '12px 14px';
+    
+    let rules = {};
+    try {
+      rules = typeof c.split_rules === 'string' ? JSON.parse(c.split_rules) : c.split_rules;
+    } catch (e) {}
+    
+    const ruleParts = [];
+    state.members.forEach(m => {
+      const ratio = rules && rules[m.name] !== undefined ? Number(rules[m.name]) : 0;
+      if (ratio > 0) {
+        ruleParts.push(`${m.name}: ${ratio}%`);
+      }
+    });
+    
+    const ruleText = ruleParts.length === 0 ? '<span style="color: var(--text-muted);">均等に精算</span>' : ruleParts.join(' / ');
+    
+    row.innerHTML = `
+      <div class="expense-card-left" style="gap: 12px; width: 100%;">
+        <div class="payer-avatar" style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255,255,255,0.15); color: white; flex-shrink: 0; font-size: 18px;">
+          ${escapeHTML(c.emoji || '📂')}
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
+          <div style="font-weight: 600; font-size: 14px;">${escapeHTML(c.name)}</div>
+          <span style="font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${ruleText}</span>
+        </div>
+        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+          <button onclick="openCategoryEditModal('${c.id}')" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-indigo)'; this.style.background='rgba(99,102,241,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+          </button>
+          <button onclick="deleteCategory('${c.id}')" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-rose)'; this.style.background='rgba(244,63,94,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function deleteCategory(id) {
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat) return;
+  
+  if (!confirm(`本当にカテゴリ「${cat.name}」を削除しますか？\n(登録済みの立替データは削除されません)`)) {
+    return;
+  }
+  
+  showToast('カテゴリを削除中...');
+  api.withSuccessHandler(res => {
+    if (res && res.success) {
+      showToast('カテゴリを削除しました');
+      loadApplicationData();
+    } else {
+      showToast('削除に失敗しました: ' + (res ? res.error : '空のレスポンス'));
+    }
+  }).withFailureHandler(err => {
+    showToast('エラーが発生しました: ' + err.message);
+  }).deleteCategory(activeSsId, id);
+}
+
+/**
+ * CATEGORY MODAL SLIDERS SYNC & VALIDATION (Supports N members dynamically)
+ */
+function generateCategoryRatioSliders(rules = {}) {
+  const container = document.getElementById('category-ratio-sliders-container');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.members.length === 0) {
+    container.innerHTML = '<div style="color: var(--text-secondary); font-size: 12px; text-align: center;">先にアカウント登録を行ってください。</div>';
+    return;
+  }
+  
+  state.members.forEach(m => {
+    let ratio = rules && rules[m.name] !== undefined ? Number(rules[m.name]) : 0;
+    
+    const sliderRow = document.createElement('div');
+    sliderRow.style.display = 'flex';
+    sliderRow.style.flexDirection = 'column';
+    sliderRow.style.gap = '6px';
+    sliderRow.className = 'ratio-slider-row';
+    sliderRow.dataset.memberName = m.name;
+    
+    sliderRow.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="width: 10px; height: 10px; border-radius: 50%; background: ${m.color}; display: inline-block;"></span>
+          <span style="font-weight: 600;">${escapeHTML(m.name)}</span>
+        </div>
+        <div>
+          <span class="ratio-val-display" style="font-family: var(--font-heading); font-weight: 700; color: white; font-size: 14px;">${ratio}</span>%
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+        <input type="range" class="ratio-slider-input" min="0" max="100" value="${ratio}" style="flex: 1; height: 6px; border-radius: 3px; color: ${m.color}; cursor: pointer;">
+      </div>
+    `;
+    
+    const slider = sliderRow.querySelector('.ratio-slider-input');
+    const display = sliderRow.querySelector('.ratio-val-display');
+    
+    slider.addEventListener('input', () => {
+      display.textContent = slider.value;
+      
+      // Dynamic two-way split synchronization only if there are exactly 2 members
+      if (state.members.length === 2) {
+        const otherMember = state.members.find(o => o.name !== m.name);
+        if (otherMember) {
+          const otherSliderRow = container.querySelector(`[data-member-name="${otherMember.name}"]`);
+          if (otherSliderRow) {
+            const otherSlider = otherSliderRow.querySelector('.ratio-slider-input');
+            const otherDisplay = otherSliderRow.querySelector('.ratio-val-display');
+            const otherVal = 100 - Number(slider.value);
+            otherSlider.value = otherVal;
+            otherDisplay.textContent = otherVal;
+          }
+        }
+      }
+      
+      updateCategoryRatioSum();
+    });
+    
+    container.appendChild(sliderRow);
+  });
+  
+  updateCategoryRatioSum();
+}
+
+function updateCategoryRatioSum() {
+  const sliders = document.querySelectorAll('.ratio-slider-input');
+  let sum = 0;
+  sliders.forEach(slider => {
+    sum += Number(slider.value);
+  });
+  
+  const badge = document.getElementById('category-ratio-sum-badge');
+  if (!badge) return;
+  
+  badge.textContent = `合計: ${sum}%`;
+  
+  if (sum === 100) {
+    badge.style.background = 'rgba(16, 185, 129, 0.15)';
+    badge.style.color = '#34d399';
+  } else {
+    badge.style.background = 'rgba(239, 68, 68, 0.15)';
+    badge.style.color = '#ef4444';
+  }
+}
+
+function openCategoryCreateModal() {
+  document.getElementById('category-modal-title').textContent = '新規カテゴリの追加';
+  document.getElementById('category-edit-id').value = '';
+  document.getElementById('category-input-emoji').value = '👥';
+  document.getElementById('category-input-name').value = '';
+  
+  const defaultRules = {};
+  if (state.members.length > 0) {
+    const defaultShare = Math.floor(100 / state.members.length);
+    let sum = 0;
+    state.members.forEach((m, idx) => {
+      if (idx === state.members.length - 1) {
+        defaultRules[m.name] = 100 - sum;
+      } else {
+        defaultRules[m.name] = defaultShare;
+        sum += defaultShare;
+      }
+    });
+  }
+  
+  generateCategoryRatioSliders(defaultRules);
+  toggleModal('category-modal', true);
+}
+
+function openCategoryEditModal(id) {
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat) return;
+  
+  document.getElementById('category-modal-title').textContent = 'カテゴリの編集';
+  document.getElementById('category-edit-id').value = cat.id;
+  document.getElementById('category-input-emoji').value = cat.emoji || '📂';
+  document.getElementById('category-input-name').value = cat.name;
+  
+  let rules = {};
+  try {
+    rules = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
+  } catch (e) {}
+  
+  generateCategoryRatioSliders(rules);
+  toggleModal('category-modal', true);
+}
+
+function saveCategoryFromForm() {
+  const id = document.getElementById('category-edit-id').value;
+  const name = document.getElementById('category-input-name').value.trim();
+  const emoji = document.getElementById('category-input-emoji').value.trim();
+  
+  if (!name) {
+    showToast('カテゴリ名を入力してください');
+    return;
+  }
+  
+  const split_rules = {};
+  const sliders = document.querySelectorAll('.ratio-slider-input');
+  let sum = 0;
+  
+  sliders.forEach(slider => {
+    const memberName = slider.closest('.ratio-slider-row').dataset.memberName;
+    const val = Number(slider.value);
+    split_rules[memberName] = val;
+    sum += val;
+  });
+  
+  if (sum !== 100) {
+    showToast('負担割合の合計が100%になっていません (現在 ' + sum + '%)');
+    return;
+  }
+  
+  const submitBtn = document.getElementById('btn-save-category');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 保存中...';
+  
+  const category = {
+    id: id || '',
+    name,
+    emoji,
+    split_rules: split_rules
+  };
+  
+  api.withSuccessHandler(res => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    toggleModal('category-modal', false);
+    
+    if (res && res.success) {
+      showToast('カテゴリを保存しました！');
+      loadApplicationData();
+    } else {
+      showToast('保存に失敗しました: ' + (res ? res.error : '空のレスポンス'));
+    }
+  }).withFailureHandler(err => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).saveCategory(activeSsId, category);
+}
+
+/**
+ * CLIENT DATE FORMATTING
+ */
+function formatDateStr(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${weekdays[d.getDay()]})`;
+}
+
+function hexToRgb(hex) {
+  if (!hex) return '99, 102, 241';
+  hex = hex.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  return `${r}, ${g}, ${b}`;
+}
+
+function escapeHTML(str) {
+  if (!str) return '';
+  return str.replace(/[&<>'"]/g, 
+    tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[tag] || tag)
+  );
+}
+</script>
+
+</body>
+</html>

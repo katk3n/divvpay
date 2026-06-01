@@ -1,0 +1,1556 @@
+<script>
+/**
+ * DivvPay - Front-End Controller (javascript.html)
+ * Premium dynamic interactions & Mock service mode (Without savings reimbursement feature)
+ */
+
+// Global high-visibility error boundary catcher
+window.onerror = function(message, source, lineno, colno, error) {
+  const errMsg = `フロントエラー: ${message} (行: ${lineno})`;
+  console.error(errMsg, error);
+  const toast = document.getElementById('toast');
+  if (toast) {
+    toast.textContent = errMsg;
+    toast.style.border = '1px solid var(--accent-rose)';
+    toast.style.background = 'rgba(244, 63, 94, 0.15)';
+    toast.style.color = '#fda4af';
+    toast.classList.add('active');
+  }
+  return false;
+};
+
+// Global state
+let state = {
+  user: { email: 'guest@example.com', name: '自分', color: '#6366f1', isAdmin: true },
+  expenses: [],
+  settlements: [],
+  members: [],
+  categories: [],
+  spreadsheetUrl: '#',
+  spreadsheetName: 'DivvPay スプレッドシート'
+};
+
+let currentHistorySegment = 'unsettled';
+let activeFormPayer = '';
+let categoryToSettle = '';
+
+// Check if running locally in a web browser
+const isLocal = window.location.hostname.indexOf('google') === -1;
+
+// Determine active Spreadsheet ID robustly for both GAS and Local environments
+let activeSsId = '';
+if (isLocal) {
+  // Local environment: Parse ID directly from URL query parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  activeSsId = urlParams.get('id') || urlParams.get('ssId') || urlParams.get('spreadsheetId') || urlParams.get('ss') || '';
+} else {
+  // GAS environment: Use the injected SPREADSHEET_ID from templating (if evaluated)
+  const isTemplateString = SPREADSHEET_ID.startsWith('<?') || SPREADSHEET_ID.startsWith('%=');
+  activeSsId = isTemplateString ? '' : SPREADSHEET_ID;
+}
+
+/**
+ * MOCK APPS SCRIPT API (Runs strictly in local environment for testing)
+ */
+const mockApiSuccess = (res, handler) => setTimeout(() => handler(res), 400);
+
+const localBackendMock = {
+  getInitialData: function(spreadsheetId, success, failure) {
+    const memKey = `divvpay_members_${spreadsheetId}`;
+    const catKey = `divvpay_categories_${spreadsheetId}`;
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    const setKey = `divvpay_settlements_${spreadsheetId}`;
+
+    if (!localStorage.getItem(memKey)) {
+      localStorage.setItem(memKey, JSON.stringify([
+        { name: '自分', email: 'me@example.com', color: '#6366f1' },
+        { name: '友人A', email: 'friend.a@example.com', color: '#ec4899' },
+        { name: '友人B', email: '', color: '#10b981' }
+      ]));
+    }
+    if (!localStorage.getItem(catKey)) {
+      localStorage.setItem(catKey, JSON.stringify([
+        { id: 'cat_1', name: '割り勘（均等）', emoji: '👥', split_rules: '{"自分":34,"友人A":33,"友人B":33}' },
+        { id: 'cat_2', name: '食事代', emoji: '🍔', split_rules: '{"自分":50,"友人A":50,"友人B":0}' },
+        { id: 'cat_3', name: '交通費', emoji: '🚕', split_rules: '{"自分":0,"友人A":100,"友人B":0}' }
+      ]));
+    }
+    if (!localStorage.getItem(expKey)) {
+      localStorage.setItem(expKey, JSON.stringify([
+        { id: 'exp_1', date: new Date().toISOString().split('T')[0], payer: '自分', amount: 4500, category: 'cat_1', description: 'みんなのランチ代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() },
+        { id: 'exp_2', date: new Date().toISOString().split('T')[0], payer: '友人A', amount: 3000, category: 'cat_2', description: 'カフェ・お茶代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() }
+      ]));
+    }
+    if (!localStorage.getItem(setKey)) {
+      localStorage.setItem(setKey, JSON.stringify([]));
+    }
+
+    const res = {
+      success: true,
+      user: { email: 'me@example.com', name: '自分', color: '#6366f1', isAdmin: true },
+      expenses: JSON.parse(localStorage.getItem(expKey)),
+      settlements: JSON.parse(localStorage.getItem(setKey)),
+      members: JSON.parse(localStorage.getItem(memKey)),
+      categories: JSON.parse(localStorage.getItem(catKey)),
+      spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/edit',
+      spreadsheetName: '【開発用Mock】' + (localStorage.getItem('divvpay_mock_name_' + spreadsheetId) || '旅行の割り勘精算')
+    };
+    mockApiSuccess(res, success);
+  },
+  
+  addExpense: function(spreadsheetId, expense, success, failure) {
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    const expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
+    const id = 'exp_' + new Date().getTime();
+    expense.id = id;
+    expense.status = 'unsettled';
+    expense.settlement_id = '';
+    expense.created_at = new Date().toISOString();
+    expenses.push(expense);
+    localStorage.setItem(expKey, JSON.stringify(expenses));
+    
+    mockApiSuccess({ success: true, expenseId: id }, success);
+  },
+
+  deleteExpense: function(spreadsheetId, id, success, failure) {
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    let expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
+    expenses = expenses.filter(e => e.id !== id);
+    localStorage.setItem(expKey, JSON.stringify(expenses));
+    
+    mockApiSuccess({ success: true }, success);
+  },
+
+  settleExpenses: function(spreadsheetId, settlerName, categoryId, success, failure) {
+    const memKey = `divvpay_members_${spreadsheetId}`;
+    const catKey = `divvpay_categories_${spreadsheetId}`;
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    const setKey = `divvpay_settlements_${spreadsheetId}`;
+
+    const expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
+    const members = JSON.parse(localStorage.getItem(memKey) || '[]');
+    const categories = JSON.parse(localStorage.getItem(catKey) || '[]');
+    const settlements = JSON.parse(localStorage.getItem(setKey) || '[]');
+    
+    const unsettled = expenses.filter(e => {
+      const matchCat = !categoryId || e.category === categoryId;
+      return e.status === 'unsettled' && matchCat;
+    });
+    
+    if (unsettled.length === 0) {
+      setTimeout(() => failure(new Error('未精算の立替がありません。')), 300);
+      return;
+    }
+    
+    const calculation = calculateClientSettlement(unsettled, members, categories);
+    
+    // Mark settled
+    expenses.forEach(e => {
+      const matchCat = !categoryId || e.category === categoryId;
+      if (e.status === 'unsettled' && matchCat) {
+        e.status = 'settled';
+        e.settlement_id = 'set_' + new Date().getTime();
+      }
+    });
+    localStorage.setItem(expKey, JSON.stringify(expenses));
+    
+    let detailsText = calculation.text;
+    const cat = categories.find(c => c.id === categoryId);
+    if (cat) {
+      detailsText = `【精算対象：${cat.emoji} ${cat.name}】\n` + detailsText;
+    }
+    
+    const settlementId = 'set_' + new Date().getTime();
+    const newSettlement = {
+      id: settlementId,
+      date: new Date().toLocaleDateString('ja-JP'),
+      settler: settlerName || 'システム',
+      total_amount: calculation.total,
+      details: detailsText,
+      created_at: new Date().toISOString()
+    };
+    settlements.push(newSettlement);
+    localStorage.setItem(setKey, JSON.stringify(settlements));
+    
+    mockApiSuccess({
+      success: true,
+      settlement: newSettlement
+    }, success);
+  },
+
+  saveCategory: function(spreadsheetId, category, success, failure) {
+    const catKey = `divvpay_categories_${spreadsheetId}`;
+    const categories = JSON.parse(localStorage.getItem(catKey) || '[]');
+    if (!category.id) {
+      category.id = 'cat_' + new Date().getTime();
+      categories.push(category);
+    } else {
+      const idx = categories.findIndex(c => c.id === category.id);
+      if (idx !== -1) {
+        categories[idx] = category;
+      }
+    }
+    localStorage.setItem(catKey, JSON.stringify(categories));
+    mockApiSuccess({ success: true, id: category.id }, success);
+  },
+
+  deleteCategory: function(spreadsheetId, id, success, failure) {
+    const catKey = `divvpay_categories_${spreadsheetId}`;
+    let categories = JSON.parse(localStorage.getItem(catKey) || '[]');
+    categories = categories.filter(c => c.id !== id);
+    localStorage.setItem(catKey, JSON.stringify(categories));
+    mockApiSuccess({ success: true }, success);
+  },
+
+  saveMemberSettings: function(spreadsheetId, members, success, failure) {
+    const memKey = `divvpay_members_${spreadsheetId}`;
+    localStorage.setItem(memKey, JSON.stringify(members));
+    mockApiSuccess({ success: true }, success);
+  }
+};
+
+// Create Google Script Simulator to mimic chainable syntax
+const googleMock = {
+  script: {
+    run: {
+      withSuccessHandler: function(successHandler) {
+        return {
+          withFailureHandler: function(failureHandler) {
+            const runner = {};
+            Object.keys(localBackendMock).forEach(methodName => {
+              runner[methodName] = function(...args) {
+                // First argument spreadsheetId is already prepended by the caller
+                localBackendMock[methodName](...args, successHandler, failureHandler);
+              };
+            });
+            return runner;
+          }
+        };
+      }
+    }
+  }
+};
+
+// Routing client API
+const api = isLocal ? googleMock.script.run : google.script.run;
+
+/**
+ * INITIALIZATION
+ */
+window.addEventListener('DOMContentLoaded', () => {
+  // Set default date to today
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('input-date').value = today;
+  
+  // Form submission setup
+  document.getElementById('expense-form').addEventListener('submit', registerExpense);
+  
+  // Modal buttons setup
+  document.getElementById('btn-open-settle-modal').addEventListener('click', () => openSettlementConfirmModal(''));
+  
+  // Initialize application view states
+  if (!activeSsId) {
+    // Show Onboarding screen
+    document.getElementById('onboarding-view').style.display = 'flex';
+  } else {
+    // Show Main app screen and load data
+    document.getElementById('main-app-view').style.display = 'block';
+    loadApplicationData();
+  }
+});
+
+/**
+ * ONBOARDING URL PARSING & REDIRECT
+ */
+function extractSpreadsheetId(input) {
+  if (!input) return '';
+  const trimmed = input.trim();
+  // Standard spreadsheet URL: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit...
+  const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]{44})/);
+  if (match) {
+    return match[1];
+  }
+  // Otherwise try to see if it's a raw 44-character ID
+  if (trimmed.length === 44 && /^[a-zA-Z0-9-_]+$/.test(trimmed)) {
+    return trimmed;
+  }
+  return '';
+}
+
+function launchFromOnboarding() {
+  const input = document.getElementById('onboarding-ss-input').value;
+  const parsedId = extractSpreadsheetId(input);
+  
+  if (!parsedId) {
+    showToast('有効なスプレッドシートの URL または ID を入力してください。');
+    return;
+  }
+  
+  const launchBtn = document.getElementById('btn-launch-onboarding');
+  launchBtn.disabled = true;
+  launchBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 起動中...';
+  
+  // Reload page with parameter (Safe for local file:// protocol)
+  window.location.search = '?id=' + parsedId;
+}
+
+function switchOnboardTab(tab) {
+  const isNew = tab === 'new';
+  document.getElementById('seg-onboard-new').classList.toggle('active', isNew);
+  document.getElementById('seg-onboard-connect').classList.toggle('active', !isNew);
+  
+  document.getElementById('onboard-tab-new').style.display = isNew ? 'block' : 'none';
+  document.getElementById('onboard-tab-connect').style.display = isNew ? 'none' : 'block';
+}
+
+function createNewSheetFromOnboarding() {
+  const nameInput = document.getElementById('onboarding-name-input');
+  const name = nameInput ? nameInput.value.trim() : '';
+  
+  if (!name) {
+    showToast('イベント名を入力してください');
+    return;
+  }
+  
+  const createBtn = document.getElementById('btn-create-sheet-onboarding');
+  const originalHtml = createBtn.innerHTML;
+  createBtn.disabled = true;
+  createBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 作成中...';
+  
+  if (isLocal) {
+    // Local mock spreadsheet creation
+    setTimeout(() => {
+      const mockId = 'mock-' + Math.random().toString(36).substr(2, 9);
+      // Save custom name to mock store
+      localStorage.setItem('divvpay_mock_name_' + mockId, name);
+      showToast('【開発Mock】精算シート「' + name + '」を作成しました！');
+      window.location.search = '?id=' + mockId;
+    }, 1000);
+    return;
+  }
+  
+  api.withSuccessHandler(res => {
+    createBtn.disabled = false;
+    createBtn.innerHTML = originalHtml;
+    
+    if (res && res.success) {
+      showToast('精算スプレッドシート「' + name + '」を作成しました！');
+      // Redirect to the new spreadsheet ID (Safe for local file:// protocol)
+      window.location.search = '?id=' + res.id;
+    } else {
+      showToast(res ? res.error : 'スプレッドシートの作成に失敗しました。');
+    }
+  }).withFailureHandler(err => {
+    createBtn.disabled = false;
+    createBtn.innerHTML = originalHtml;
+    showToast('エラーが発生しました: ' + err.message);
+  }).createNewSpreadsheet(name);
+}
+
+function resetToOnboarding() {
+  // Clear search query to return to onboarding (Safe for local file:// protocol)
+  window.location.search = '';
+}
+
+/**
+ * DATA ACQUISITION
+ */
+function loadApplicationData() {
+  api.withSuccessHandler(response => {
+    if (response && response.success) {
+      state.user = response.user;
+      state.expenses = response.expenses || [];
+      state.settlements = response.settlements || [];
+      state.members = response.members || [];
+      state.categories = response.categories || [];
+      state.spreadsheetUrl = response.spreadsheetUrl;
+      state.spreadsheetName = response.spreadsheetName || 'DivvPay スプレッドシート';
+      
+      // Update UI elements
+      document.getElementById('header-user-email').textContent = `${state.user.email || 'スプレッドシート共有メンバー'} (${state.user.name || 'ゲスト'})`;
+      document.getElementById('settings-spreadsheet-link').href = state.spreadsheetUrl;
+      document.getElementById('settings-user-role').textContent = isLocal ? 'ローカル開発Mockモード' : `GAS 共有ユーザー (${state.user.name})`;
+      
+      // Update dynamic spreadsheet title
+      const spreadsheetNameEl = document.getElementById('spreadsheet-name');
+      if (spreadsheetNameEl) {
+        spreadsheetNameEl.textContent = state.spreadsheetName;
+      }
+      
+      // Auto-set form active payer to current user if matches, otherwise the first member
+      const matchingMember = state.members.find(m => m.email && state.user.email && m.email.toLowerCase().trim() === state.user.email.toLowerCase().trim());
+      activeFormPayer = matchingMember ? matchingMember.name : (state.members[0] ? state.members[0].name : '');
+      
+      renderPayerSelectorGrid();
+      renderCategorySelectorGrid();
+      renderDashboard();
+      renderExpenseHistory();
+      renderSettingsMembers();
+      renderSettingsCategories();
+    } else {
+      const errorMsg = response ? response.error : 'サーバーからのレスポンスが空です。\n\n【原因の可能性】\n1. Google Apps Scriptの初回実行に伴う承認（アクセス許可）が完了していない。\n2. スプレッドシートIDが間違っている、または閲覧権限がない。\n\n【対策】\nスプレッドシートのメニュー「拡張機能」＞「Apps Script」から、一度手動で「getInitialData」を実行し、画面上の許可ポップアップで承認を行ってください。その後、本アプリを再読み込みしてください。';
+      showErrorPage(errorMsg);
+    }
+  }).withFailureHandler(err => {
+    showErrorPage(err ? err.message : 'サーバー通信エラーが発生しました。');
+  }).getInitialData(activeSsId);
+}
+
+/**
+ * NAVIGATION (SPA ROUTER)
+ */
+function switchTab(tabId, el) {
+  // Toggle Active Content
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.style.display = 'none';
+  });
+  const targetTab = document.getElementById('tab-' + tabId);
+  if (targetTab) {
+    targetTab.style.display = 'block';
+  }
+  
+  // Toggle Navigation active states
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.classList.remove('active');
+  });
+  el.classList.add('active');
+}
+
+function switchHistorySegment(segment) {
+  currentHistorySegment = segment;
+  document.getElementById('seg-unsettled').classList.toggle('active', segment === 'unsettled');
+  document.getElementById('seg-settled').classList.toggle('active', segment === 'settled');
+  
+  renderExpenseHistory();
+}
+
+/**
+ * CLIENT-SIDE SETTLEMENT ALGORITHM (No savings reimbursement feature)
+ */
+function calculateClientSettlement(unsettled, members, categories) {
+  const total = unsettled.reduce((sum, e) => sum + Number(e.amount), 0);
+  if (unsettled.length === 0) {
+    return { total: 0, transfers: [], text: '未精算の立替はありません。' };
+  }
+  
+  const cats = categories || state.categories || [];
+  const mems = members || state.members || [];
+  
+  const balances = {};
+  mems.forEach(m => {
+    balances[m.name] = 0;
+  });
+  
+  unsettled.forEach(e => {
+    const amt = Number(e.amount);
+    const payer = e.payer;
+    
+    // Find category
+    const cat = cats.find(c => c.id === e.category || c.name === e.category);
+    let ratios = {};
+    if (!cat) {
+      // equal split fallback
+      mems.forEach(m => {
+        ratios[m.name] = 100 / mems.length;
+      });
+    } else {
+      try {
+        ratios = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
+      } catch (err) {
+        mems.forEach(m => {
+          ratios[m.name] = 100 / mems.length;
+        });
+      }
+    }
+    
+    if (balances[payer] !== undefined) {
+      balances[payer] += amt;
+    }
+    
+    mems.forEach(m => {
+      const ratio = Number(ratios[m.name]) || 0;
+      const share = amt * (ratio / 100);
+      if (balances[m.name] !== undefined) {
+        balances[m.name] -= share;
+      }
+    });
+  });
+  
+  const transfers = [];
+  const debtors = [];
+  const creditors = [];
+  
+  mems.forEach(m => {
+    const bal = Math.round(balances[m.name]);
+    if (bal < -0.1) {
+      debtors.push({ name: m.name, amount: -bal });
+    } else if (bal > 0.1) {
+      creditors.push({ name: m.name, amount: bal });
+    }
+  });
+  
+  let debtIdx = 0;
+  let credIdx = 0;
+  while (debtIdx < debtors.length && credIdx < creditors.length) {
+    const debtor = debtors[debtIdx];
+    const creditor = creditors[credIdx];
+    
+    const transAmt = Math.min(debtor.amount, creditor.amount);
+    if (transAmt > 0.1) {
+      transfers.push({
+        from: debtor.name,
+        to: creditor.name,
+        amount: Math.round(transAmt),
+        text: `${debtor.name} ➔ ${creditor.name} : ${Math.round(transAmt).toLocaleString()}円`
+      });
+    }
+    
+    debtor.amount -= transAmt;
+    creditor.amount -= transAmt;
+    
+    if (debtor.amount < 0.1) debtIdx++;
+    if (creditor.amount < 0.1) credIdx++;
+  }
+  
+  let text = '';
+  if (transfers.length === 0) {
+    text = '相殺により全員の支払額が均衡しています。送金の必要はありません。';
+  } else {
+    text = transfers.map(t => t.text).join('\n');
+  }
+  
+  return { total, transfers, text };
+}
+
+/**
+ * RENDERING FUNCTIONS
+ */
+function renderPayerSelectorGrid() {
+  const container = document.getElementById('form-payer-grid');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.members.length === 0) {
+    container.innerHTML = '<div style="color: var(--text-secondary); grid-column: 1/-1; text-align: center; font-size: 13px;">メンバーを先に設定してください。</div>';
+    return;
+  }
+  
+  state.members.forEach(m => {
+    const pill = document.createElement('div');
+    pill.className = 'pill-option';
+    if (m.name === activeFormPayer) {
+      pill.classList.add('active');
+      pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
+      pill.style.borderColor = m.color;
+    }
+    pill.dataset.payerName = m.name;
+    pill.style.setProperty('--shadow-color', m.color + '40');
+    
+    pill.innerHTML = `
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: ${m.color}; display: inline-block;"></span>
+      <span>${escapeHTML(m.name)}</span>
+    `;
+    
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.pill-option').forEach(el => {
+        el.classList.remove('active');
+        el.style.background = '';
+        el.style.borderColor = '';
+      });
+      pill.classList.add('active');
+      pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
+      pill.style.borderColor = m.color;
+      activeFormPayer = m.name;
+    });
+    
+    container.appendChild(pill);
+  });
+}
+
+function renderCategorySelectorGrid() {
+  const grid = document.getElementById('form-category-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  
+  if (state.categories.length === 0) {
+    grid.innerHTML = '<div style="color: var(--text-secondary); grid-column: 1/-1; text-align: center; padding: 12px; font-size: 13px;">カテゴリが登録されていません。設定から追加してください。</div>';
+    return;
+  }
+  
+  state.categories.forEach((cat, index) => {
+    const opt = document.createElement('div');
+    opt.className = 'category-option';
+    if (index === 0) opt.classList.add('active');
+    opt.dataset.categoryId = cat.id;
+    opt.innerHTML = `
+      <span class="cat-icon">${escapeHTML(cat.emoji || '📂')}</span>
+      <span>${escapeHTML(cat.name)}</span>
+    `;
+    opt.addEventListener('click', () => {
+      document.querySelectorAll('.category-option').forEach(el => el.classList.remove('active'));
+      opt.classList.add('active');
+    });
+    grid.appendChild(opt);
+  });
+}
+
+function renderDashboard() {
+  const unsettled = state.expenses.filter(e => e.status === 'unsettled');
+  const calculation = calculateClientSettlement(unsettled, state.members, state.categories);
+  
+  // Set Total Amount
+  document.getElementById('dashboard-total').textContent = calculation.total.toLocaleString() + '円';
+  
+  // Set transfer text
+  const box = document.getElementById('dashboard-settlement-path');
+  const textEl = document.getElementById('dashboard-settlement-text');
+  
+  if (unsettled.length === 0) {
+    box.style.border = '1px solid rgba(255,255,255,0.05)';
+    box.style.background = 'rgba(255,255,255,0.02)';
+    textEl.innerHTML = '<span style="color: var(--text-secondary)">未精算の立替は現在ありません。とてもクリーンな状態です！</span>';
+    document.getElementById('btn-open-settle-modal').disabled = true;
+  } else {
+    box.style.border = '1px solid rgba(99, 102, 241, 0.2)';
+    box.style.background = 'rgba(99, 102, 241, 0.08)';
+    document.getElementById('btn-open-settle-modal').disabled = false;
+    
+    const formattedText = calculation.text.split('\n').map(line => {
+      return `<div style="font-size: 15px; font-weight: 600; margin-bottom: 4px; font-family: var(--font-heading); color: #fff;">${line}</div>`;
+    }).join('');
+    
+    textEl.innerHTML = `<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase;">精算に必要な送金ルート</div>${formattedText}`;
+  }
+  
+  // Render Category stats
+  const catStatsContainer = document.getElementById('category-stats');
+  catStatsContainer.innerHTML = '';
+  
+  if (unsettled.length === 0) {
+    catStatsContainer.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🎉</div>
+        <p style="font-size: 14px;">立替データはありません</p>
+      </div>`;
+    return;
+  }
+  
+  // Group categories
+  const catSum = {};
+  let maxCatAmount = 0;
+  
+  unsettled.forEach(e => {
+    const catId = e.category || 'cat_other';
+    catSum[catId] = (catSum[catId] || 0) + Number(e.amount);
+    if (catSum[catId] > maxCatAmount) maxCatAmount = catSum[catId];
+  });
+  
+  Object.keys(catSum).sort((a,b) => catSum[b] - catSum[a]).forEach(catId => {
+    const amount = catSum[catId];
+    const percentage = maxCatAmount > 0 ? (amount / maxCatAmount) * 100 : 0;
+    
+    // Find category info
+    const cat = state.categories.find(c => c.id === catId || c.name === catId);
+    const catName = cat ? cat.name : 'その他';
+    const catEmoji = cat ? cat.emoji : '📂';
+    
+    const row = document.createElement('div');
+    row.className = 'category-stat-row';
+    row.innerHTML = `
+      <div class="category-stat-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <span>${catEmoji} ${catName}</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-family: var(--font-heading); font-weight: 700; font-size: 14px;">${amount.toLocaleString()}円</span>
+          <button class="btn btn-settle-cat" style="width: auto; padding: 6px 14px; font-size: 11px; border-radius: 20px; background: linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan)); color: white; border: none; box-shadow: 0 0 10px rgba(6, 182, 212, 0.45); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;" onclick="openSettlementConfirmModal('${catId}')">
+            <span class="material-symbols-outlined" style="font-size: 13px;">price_check</span>
+            精算
+          </button>
+        </div>
+      </div>
+      <div class="category-progress-bg" style="margin-top: 6px;">
+        <div class="category-progress-bar" style="width: 0%;"></div>
+      </div>
+    `;
+    catStatsContainer.appendChild(row);
+    
+    // Smooth progress fill trigger
+    setTimeout(() => {
+      const bar = row.querySelector('.category-progress-bar');
+      if (bar) bar.style.width = `${percentage}%`;
+    }, 100);
+  });
+}
+
+function renderExpenseHistory() {
+  const expContainer = document.getElementById('expense-list-container');
+  const setContainer = document.getElementById('settlement-list-container');
+  
+  if (currentHistorySegment === 'unsettled') {
+    expContainer.style.display = 'flex';
+    setContainer.style.display = 'none';
+    expContainer.innerHTML = '';
+    
+    const unsettled = state.expenses
+      .filter(e => e.status === 'unsettled')
+      .sort((a,b) => new Date(b.date) - new Date(a.date) || new Date(b.created_at) - new Date(a.created_at));
+      
+    if (unsettled.length === 0) {
+      expContainer.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">📄</div>
+          <p>未精算のデータはありません</p>
+        </div>`;
+      return;
+    }
+    
+    unsettled.forEach(e => {
+      const card = document.createElement('div');
+      card.className = 'expense-card';
+      
+      // Match member details
+      const member = state.members.find(m => m.name === e.payer) || { color: '#6366f1' };
+      
+      // Find category details
+      const cat = state.categories.find(c => c.id === e.category || c.name === e.category);
+      const categoryLabel = cat ? `${cat.emoji} ${cat.name}` : e.category;
+      
+      card.innerHTML = `
+        <div class="expense-card-left">
+          <div class="payer-avatar" style="background: rgba(${hexToRgb(member.color)}, 0.12); border-color: ${member.color}; color: ${member.color}; font-weight: 700;">
+            ${e.payer.charAt(0)}
+          </div>
+          <div class="expense-details">
+            <div class="expense-title-row">
+              <span class="expense-memo">${escapeHTML(e.description) || '立替費用'}</span>
+              <span class="expense-category-tag">${escapeHTML(categoryLabel)}</span>
+            </div>
+            <span class="expense-date">${formatDateStr(e.date)}</span>
+          </div>
+        </div>
+        <div class="expense-card-right">
+          <span class="expense-amount">${Number(e.amount).toLocaleString()}円</span>
+          <span class="expense-payer-name">${e.payer}立替</span>
+        </div>
+      `;
+      
+      card.addEventListener('click', () => openExpenseDetailDrawer(e));
+      expContainer.appendChild(card);
+    });
+    
+  } else {
+    // Settled History Segment
+    expContainer.style.display = 'none';
+    setContainer.style.display = 'flex';
+    setContainer.innerHTML = '';
+    
+    const settlements = [...state.settlements].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    if (settlements.length === 0) {
+      setContainer.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">history</div>
+          <p>過去の精算履歴はありません</p>
+        </div>`;
+      return;
+    }
+    
+    settlements.forEach(s => {
+      const card = document.createElement('div');
+      card.className = 'expense-card';
+      card.style.flexDirection = 'column';
+      card.style.alignItems = 'stretch';
+      card.style.cursor = 'default';
+      card.style.gap = '8px';
+      
+      card.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="material-symbols-outlined" style="color: var(--accent-emerald);">verified</span>
+            <span style="font-weight: 700; font-family: var(--font-heading); font-size: 15px;">精算の完了</span>
+          </div>
+          <span style="font-size: 12px; color: var(--text-muted);">${formatDateStr(s.date)}</span>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-secondary); border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
+          <span>精算総額: <b style="color: white;">${Number(s.total_amount).toLocaleString()}円</b></span>
+          <span>精算者: ${s.settler || 'システム'}</span>
+        </div>
+        
+        <div class="settlement-card-details">
+          ${escapeHTML(s.details)}
+        </div>
+      `;
+      setContainer.appendChild(card);
+    });
+  }
+}
+
+/**
+ * FORM ACTIONS
+ */
+function registerExpense(e) {
+  e.preventDefault();
+  
+  const amount = document.getElementById('input-amount').value;
+  const payer = activeFormPayer;
+  
+  const categoryOption = document.querySelector('.category-option.active');
+  const category = categoryOption ? (categoryOption.dataset.categoryId || categoryOption.dataset.category) : '';
+  
+  const date = document.getElementById('input-date').value;
+  const description = document.getElementById('input-description').value;
+  
+  if (!amount || !payer || !date) {
+    showToast('入力項目を確認してください');
+    return;
+  }
+  
+  const submitBtn = document.getElementById('btn-submit-expense');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 登録中...';
+  
+  const expense = { amount, payer, category, date, description };
+  
+  api.withSuccessHandler(res => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">add_task</span> 立替を登録する';
+    
+    if (res && res.success) {
+      showToast('立替費用を登録しました！');
+      
+      // Reset Form fields
+      document.getElementById('input-amount').value = '';
+      document.getElementById('input-description').value = '';
+      document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+      
+      // Reload data
+      loadApplicationData();
+      
+      // Route back to dashboard
+      const navDash = document.querySelector('.nav-item');
+      switchTab('dashboard', navDash);
+    } else {
+      showToast('登録に失敗しました: ' + (res ? res.error : 'サーバーレスポンスが空です。'));
+    }
+  }).withFailureHandler(err => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">add_task</span> 立替を登録する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).addExpense(activeSsId, expense);
+}
+
+/**
+ * DETAIL DRAWER (MODAL EXPENSE)
+ */
+function openExpenseDetailDrawer(expense) {
+  document.getElementById('detail-id').value = expense.id;
+  document.getElementById('detail-date').textContent = formatDateStr(expense.date);
+  document.getElementById('detail-payer').textContent = expense.payer;
+  document.getElementById('detail-amount').textContent = Number(expense.amount).toLocaleString() + '円';
+  
+  const cat = state.categories.find(c => c.id === expense.category || c.name === expense.category);
+  const categoryLabel = cat ? `${cat.emoji} ${cat.name}` : expense.category;
+  document.getElementById('detail-category').textContent = categoryLabel;
+  
+  document.getElementById('detail-description').textContent = expense.description || '記入なし';
+  
+  toggleModal('expense-modal', true);
+}
+
+function confirmDeleteExpense() {
+  const id = document.getElementById('detail-id').value;
+  if (!id) return;
+  
+  const deleteBtn = document.getElementById('btn-delete-expense');
+  deleteBtn.disabled = true;
+  deleteBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 削除中...';
+  
+  api.withSuccessHandler(res => {
+    deleteBtn.disabled = false;
+    deleteBtn.innerHTML = '<span class="material-symbols-outlined">delete</span> 削除する';
+    toggleModal('expense-modal', false);
+    
+    if (res && res.success) {
+      showToast('立替データを削除しました');
+      loadApplicationData();
+    } else {
+      showToast('削除に失敗しました: ' + (res ? res.error : 'サーバーレスポンスが空です。'));
+    }
+  }).withFailureHandler(err => {
+    deleteBtn.disabled = false;
+    deleteBtn.innerHTML = '<span class="material-symbols-outlined">delete</span> 削除する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).deleteExpense(activeSsId, id);
+}
+
+/**
+ * SETTLEMENT CONFIRMATION MODAL
+ */
+function openSettlementConfirmModal(category) {
+  categoryToSettle = category || '';
+  
+  const unsettled = state.expenses.filter(e => {
+    const matchCat = !categoryToSettle || e.category === categoryToSettle;
+    return e.status === 'unsettled' && matchCat;
+  });
+  
+  if (unsettled.length === 0) {
+    showToast('このカテゴリの未精算データはありません');
+    return;
+  }
+  
+  const calculation = calculateClientSettlement(unsettled, state.members, state.categories);
+  const detailBox = document.getElementById('modal-settle-summary-box');
+  
+  const formattedText = calculation.text.split('\n').map(line => {
+    return `<div style="padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03);">${line}</div>`;
+  }).join('');
+  
+  // Update Modal Title based on selected category
+  let shortTitle = 'すべての出費';
+  if (categoryToSettle) {
+    const matchedCat = state.categories.find(c => c.id === categoryToSettle || c.name === categoryToSettle);
+    if (matchedCat) shortTitle = matchedCat.name;
+  }
+  document.querySelector('#settle-modal h3').textContent = `精算の確定 (${shortTitle})`;
+  
+  detailBox.innerHTML = `
+    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">確定する送金ルート</div>
+    ${formattedText}
+    <div style="margin-top: 10px; text-align: right; font-size: 11px; color: var(--text-muted);">
+      立替件数: ${unsettled.length}件 / 総額: ${calculation.total.toLocaleString()}円
+    </div>
+  `;
+  
+  toggleModal('settle-modal', true);
+}
+
+function executeSettlement() {
+  const settleBtn = document.getElementById('btn-confirm-settlement');
+  settleBtn.disabled = true;
+  settleBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 精算中...';
+  
+  // Identify active user as settler
+  const settlerName = state.user.name || 'メンバー';
+  
+  api.withSuccessHandler(res => {
+    settleBtn.disabled = false;
+    settleBtn.innerHTML = '<span class="material-symbols-outlined">price_check</span> 確定する';
+    toggleModal('settle-modal', false);
+    
+    if (res && res.success) {
+      showToast('精算を確定しました！履歴に記録されました。');
+      loadApplicationData();
+    } else {
+      showToast('精算に失敗しました: ' + (res ? res.error : 'サーバーレスポンスが空です。'));
+    }
+  }).withFailureHandler(err => {
+    settleBtn.disabled = false;
+    settleBtn.innerHTML = '<span class="material-symbols-outlined">price_check</span> 確定する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).settleExpenses(activeSsId, settlerName, categoryToSettle);
+}
+
+/**
+ * GENERIC UI UTILITIES
+ */
+function toggleModal(modalId, show) {
+  const overlay = document.getElementById(modalId);
+  if (!overlay) return;
+  if (show) {
+    overlay.classList.add('active');
+  } else {
+    overlay.classList.remove('active');
+  }
+}
+
+function closeExpenseModal(e) {
+  if (e.target.id === 'expense-modal') toggleModal('expense-modal', false);
+}
+
+function closeSettleModal(e) {
+  if (e.target.id === 'settle-modal') toggleModal('settle-modal', false);
+}
+
+function closeCategoryModal(e) {
+  if (e.target.id === 'category-modal') toggleModal('category-modal', false);
+}
+
+function closeMemberModal(e) {
+  if (e.target.id === 'member-modal') toggleModal('member-modal', false);
+}
+
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('active');
+  
+  setTimeout(() => {
+    toast.classList.remove('active');
+  }, 3500);
+}
+
+function showErrorPage(errMsg) {
+  const mainApp = document.getElementById('main-app-view');
+  if (mainApp) mainApp.style.display = 'none';
+  
+  const errPage = document.getElementById('access-denied-page');
+  if (errPage) errPage.style.display = 'block';
+  
+  const msgEl = document.getElementById('access-denied-message');
+  if (msgEl) {
+    msgEl.innerHTML = escapeHTML(errMsg).replace(/\n/g, '<br>');
+  }
+  console.error("GAS or Spreadsheet error occurred:", errMsg);
+}
+
+/**
+ * MEMBER MANAGEMENT (DYNAMIC MULTI-MEMBER CRUD)
+ */
+function renderSettingsMembers() {
+  const container = document.getElementById('settings-members-list');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.members.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding: 12px;"><p>メンバーが登録されていません</p></div>';
+    return;
+  }
+  
+  state.members.forEach((m, index) => {
+    const card = document.createElement('div');
+    card.className = 'expense-card';
+    card.style.cursor = 'default';
+    card.style.padding = '12px 14px';
+    
+    card.innerHTML = `
+      <div class="expense-card-left" style="gap: 12px; width: 100%;">
+        <div class="payer-avatar" style="background: rgba(${hexToRgb(m.color)}, 0.12); border-color: m.color; color: ${m.color}; font-weight: 700; flex-shrink: 0;">
+          ${escapeHTML(m.name.charAt(0))}
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
+          <div style="font-weight: 600; font-size: 14px;">${escapeHTML(m.name)}</div>
+          <span style="font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${escapeHTML(m.email || 'メール未設定')}
+          </span>
+        </div>
+        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+          <button onclick="openMemberEditModal(${index})" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-indigo)'; this.style.background='rgba(99,102,241,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+          </button>
+          <button onclick="deleteMember(${index})" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-rose)'; this.style.background='rgba(244,63,94,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function openMemberCreateModal() {
+  document.getElementById('member-modal-title').textContent = '新規メンバーの追加';
+  document.getElementById('member-edit-index').value = '';
+  document.getElementById('member-original-name').value = '';
+  document.getElementById('member-input-name').value = '';
+  document.getElementById('member-input-email').value = '';
+  
+  // Choose random default color from nice vibrant hues
+  const colors = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#8b5cf6'];
+  const randomColor = colors[Math.floor(Math.random() * colors.length)];
+  document.getElementById('member-input-color').value = randomColor;
+  
+  toggleModal('member-modal', true);
+}
+
+function openMemberEditModal(index) {
+  const m = state.members[index];
+  if (!m) return;
+  
+  document.getElementById('member-modal-title').textContent = 'メンバーの編集';
+  document.getElementById('member-edit-index').value = index;
+  document.getElementById('member-original-name').value = m.name;
+  document.getElementById('member-input-name').value = m.name;
+  document.getElementById('member-input-email').value = m.email || '';
+  document.getElementById('member-input-color').value = m.color || '#6366f1';
+  
+  toggleModal('member-modal', true);
+}
+
+function saveMemberFromForm() {
+  const indexStr = document.getElementById('member-edit-index').value;
+  const originalName = document.getElementById('member-original-name').value;
+  const name = document.getElementById('member-input-name').value.trim();
+  const email = document.getElementById('member-input-email').value.trim();
+  const color = document.getElementById('member-input-color').value;
+  
+  if (!name) {
+    showToast('名前を入力してください');
+    return;
+  }
+  
+  // Validate duplicate member names
+  const duplicate = state.members.find((m, idx) => m.name.toLowerCase() === name.toLowerCase() && idx.toString() !== indexStr);
+  if (duplicate) {
+    showToast('同じ名前のメンバーが既に存在します。異なる名前にしてください。');
+    return;
+  }
+  
+  const updatedMembers = [...state.members];
+  const newMember = { name, email, color };
+  
+  if (indexStr === '') {
+    // Add new member
+    updatedMembers.push(newMember);
+  } else {
+    // Update existing member
+    const index = parseInt(indexStr, 10);
+    updatedMembers[index] = newMember;
+  }
+  
+  // Prepare Category splits healing
+  // If a member name was changed, we must update all category split rules mapping from originalName to name!
+  if (originalName && originalName !== name) {
+    state.categories.forEach(cat => {
+      let rules = {};
+      try {
+        rules = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
+      } catch (e) {}
+      
+      if (rules && rules[originalName] !== undefined) {
+        rules[name] = rules[originalName];
+        delete rules[originalName];
+        cat.split_rules = rules;
+      }
+    });
+  }
+  
+  const submitBtn = document.getElementById('btn-save-member');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 保存中...';
+  
+  api.withSuccessHandler(res => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    toggleModal('member-modal', false);
+    
+    if (res && res.success) {
+      showToast('メンバー設定を保存しました！');
+      
+      // If name changed, trigger category updates on the server too
+      if (originalName && originalName !== name) {
+        let indexToUpdate = 0;
+        const updateNextCategory = () => {
+          if (indexToUpdate < state.categories.length) {
+            const cat = state.categories[indexToUpdate];
+            api.withSuccessHandler(() => {
+              indexToUpdate++;
+              updateNextCategory();
+            }).withFailureHandler(() => {
+              indexToUpdate++;
+              updateNextCategory();
+            }).saveCategory(activeSsId, cat);
+          } else {
+            loadApplicationData();
+          }
+        };
+        updateNextCategory();
+      } else {
+        loadApplicationData();
+      }
+    } else {
+      showToast('保存に失敗しました: ' + (res ? res.error : '空のレスポンス'));
+    }
+  }).withFailureHandler(err => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).saveMemberSettings(activeSsId, updatedMembers);
+}
+
+function deleteMember(index) {
+  const m = state.members[index];
+  if (!m) return;
+  
+  if (state.members.length <= 2) {
+    showToast('精算のために最低でも2名のメンバーが必要です。');
+    return;
+  }
+  
+  if (!confirm(`本当にメンバー「${m.name}」を削除しますか？\n(注意: 精算計算の整合性を保つため、このメンバーが設定されているカテゴリの負担割合は、残りのメンバーへ均等割り当て等にリセットされます。)`)) {
+    return;
+  }
+  
+  showToast('メンバーを削除中...');
+  const updatedMembers = state.members.filter((_, idx) => idx !== index);
+  
+  // Heal category splits
+  state.categories.forEach(cat => {
+    let rules = {};
+    try {
+      rules = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
+    } catch(e) {}
+    
+    if (rules && rules[m.name] !== undefined) {
+      delete rules[m.name];
+      
+      // Recalculate remaining to sum to 100%
+      let remainingSum = 0;
+      Object.keys(rules).forEach(k => remainingSum += Number(rules[k]));
+      
+      if (remainingSum > 0) {
+        // Distribute proportionally
+        Object.keys(rules).forEach(k => {
+          rules[k] = Math.round((Number(rules[k]) / remainingSum) * 100);
+        });
+        
+        // Correct rounding errors
+        let newSum = 0;
+        Object.keys(rules).forEach(k => newSum += rules[k]);
+        if (newSum !== 100 && Object.keys(rules).length > 0) {
+          const firstKey = Object.keys(rules)[0];
+          rules[firstKey] += (100 - newSum);
+        }
+      } else {
+        // Reset to equal split among remaining members
+        const equalShare = Math.floor(100 / updatedMembers.length);
+        let sum = 0;
+        updatedMembers.forEach((rem, idx) => {
+          if (idx === updatedMembers.length - 1) {
+            rules[rem.name] = 100 - sum;
+          } else {
+            rules[rem.name] = equalShare;
+            sum += equalShare;
+          }
+        });
+      }
+      cat.split_rules = rules;
+    }
+  });
+  
+  api.withSuccessHandler(res => {
+    if (res && res.success) {
+      showToast('メンバーを削除しました！');
+      
+      // Save all updated category configurations on the server
+      let idxToSave = 0;
+      const saveNextCategory = () => {
+        if (idxToSave < state.categories.length) {
+          api.withSuccessHandler(() => {
+            idxToSave++;
+            saveNextCategory();
+          }).withFailureHandler(() => {
+            idxToSave++;
+            saveNextCategory();
+          }).saveCategory(activeSsId, state.categories[idxToSave]);
+        } else {
+          loadApplicationData();
+        }
+      };
+      saveNextCategory();
+    } else {
+      showToast('削除に失敗しました: ' + (res ? res.error : '空のレスポンス'));
+    }
+  }).withFailureHandler(err => {
+    showToast('エラーが発生しました: ' + err.message);
+  }).saveMemberSettings(activeSsId, updatedMembers);
+}
+
+/**
+ * CATEGORY MANAGEMENT (No savings option, dynamic N-member splitting sliders)
+ */
+function renderSettingsCategories() {
+  const container = document.getElementById('settings-categories-list');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.categories.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding: 12px;"><p>カテゴリが登録されていません</p></div>';
+    return;
+  }
+  
+  state.categories.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'expense-card';
+    row.style.cursor = 'default';
+    row.style.padding = '12px 14px';
+    
+    let rules = {};
+    try {
+      rules = typeof c.split_rules === 'string' ? JSON.parse(c.split_rules) : c.split_rules;
+    } catch (e) {}
+    
+    const ruleParts = [];
+    state.members.forEach(m => {
+      const ratio = rules && rules[m.name] !== undefined ? Number(rules[m.name]) : 0;
+      if (ratio > 0) {
+        ruleParts.push(`${m.name}: ${ratio}%`);
+      }
+    });
+    
+    const ruleText = ruleParts.length === 0 ? '<span style="color: var(--text-muted);">均等に精算</span>' : ruleParts.join(' / ');
+    
+    row.innerHTML = `
+      <div class="expense-card-left" style="gap: 12px; width: 100%;">
+        <div class="payer-avatar" style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255,255,255,0.15); color: white; flex-shrink: 0; font-size: 18px;">
+          ${escapeHTML(c.emoji || '📂')}
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
+          <div style="font-weight: 600; font-size: 14px;">${escapeHTML(c.name)}</div>
+          <span style="font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${ruleText}</span>
+        </div>
+        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+          <button onclick="openCategoryEditModal('${c.id}')" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-indigo)'; this.style.background='rgba(99,102,241,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+          </button>
+          <button onclick="deleteCategory('${c.id}')" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-rose)'; this.style.background='rgba(244,63,94,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function deleteCategory(id) {
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat) return;
+  
+  if (!confirm(`本当にカテゴリ「${cat.name}」を削除しますか？\n(登録済みの立替データは削除されません)`)) {
+    return;
+  }
+  
+  showToast('カテゴリを削除中...');
+  api.withSuccessHandler(res => {
+    if (res && res.success) {
+      showToast('カテゴリを削除しました');
+      loadApplicationData();
+    } else {
+      showToast('削除に失敗しました: ' + (res ? res.error : '空のレスポンス'));
+    }
+  }).withFailureHandler(err => {
+    showToast('エラーが発生しました: ' + err.message);
+  }).deleteCategory(activeSsId, id);
+}
+
+/**
+ * CATEGORY MODAL SLIDERS SYNC & VALIDATION (Supports N members dynamically)
+ */
+function generateCategoryRatioSliders(rules = {}) {
+  const container = document.getElementById('category-ratio-sliders-container');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.members.length === 0) {
+    container.innerHTML = '<div style="color: var(--text-secondary); font-size: 12px; text-align: center;">先にアカウント登録を行ってください。</div>';
+    return;
+  }
+  
+  state.members.forEach(m => {
+    let ratio = rules && rules[m.name] !== undefined ? Number(rules[m.name]) : 0;
+    
+    const sliderRow = document.createElement('div');
+    sliderRow.style.display = 'flex';
+    sliderRow.style.flexDirection = 'column';
+    sliderRow.style.gap = '6px';
+    sliderRow.className = 'ratio-slider-row';
+    sliderRow.dataset.memberName = m.name;
+    
+    sliderRow.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="width: 10px; height: 10px; border-radius: 50%; background: ${m.color}; display: inline-block;"></span>
+          <span style="font-weight: 600;">${escapeHTML(m.name)}</span>
+        </div>
+        <div>
+          <span class="ratio-val-display" style="font-family: var(--font-heading); font-weight: 700; color: white; font-size: 14px;">${ratio}</span>%
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+        <input type="range" class="ratio-slider-input" min="0" max="100" value="${ratio}" style="flex: 1; height: 6px; border-radius: 3px; color: ${m.color}; cursor: pointer;">
+      </div>
+    `;
+    
+    const slider = sliderRow.querySelector('.ratio-slider-input');
+    const display = sliderRow.querySelector('.ratio-val-display');
+    
+    slider.addEventListener('input', () => {
+      display.textContent = slider.value;
+      
+      // Dynamic two-way split synchronization only if there are exactly 2 members
+      if (state.members.length === 2) {
+        const otherMember = state.members.find(o => o.name !== m.name);
+        if (otherMember) {
+          const otherSliderRow = container.querySelector(`[data-member-name="${otherMember.name}"]`);
+          if (otherSliderRow) {
+            const otherSlider = otherSliderRow.querySelector('.ratio-slider-input');
+            const otherDisplay = otherSliderRow.querySelector('.ratio-val-display');
+            const otherVal = 100 - Number(slider.value);
+            otherSlider.value = otherVal;
+            otherDisplay.textContent = otherVal;
+          }
+        }
+      }
+      
+      updateCategoryRatioSum();
+    });
+    
+    container.appendChild(sliderRow);
+  });
+  
+  updateCategoryRatioSum();
+}
+
+function updateCategoryRatioSum() {
+  const sliders = document.querySelectorAll('.ratio-slider-input');
+  let sum = 0;
+  sliders.forEach(slider => {
+    sum += Number(slider.value);
+  });
+  
+  const badge = document.getElementById('category-ratio-sum-badge');
+  if (!badge) return;
+  
+  badge.textContent = `合計: ${sum}%`;
+  
+  if (sum === 100) {
+    badge.style.background = 'rgba(16, 185, 129, 0.15)';
+    badge.style.color = '#34d399';
+  } else {
+    badge.style.background = 'rgba(239, 68, 68, 0.15)';
+    badge.style.color = '#ef4444';
+  }
+}
+
+function openCategoryCreateModal() {
+  document.getElementById('category-modal-title').textContent = '新規カテゴリの追加';
+  document.getElementById('category-edit-id').value = '';
+  document.getElementById('category-input-emoji').value = '👥';
+  document.getElementById('category-input-name').value = '';
+  
+  const defaultRules = {};
+  if (state.members.length > 0) {
+    const defaultShare = Math.floor(100 / state.members.length);
+    let sum = 0;
+    state.members.forEach((m, idx) => {
+      if (idx === state.members.length - 1) {
+        defaultRules[m.name] = 100 - sum;
+      } else {
+        defaultRules[m.name] = defaultShare;
+        sum += defaultShare;
+      }
+    });
+  }
+  
+  generateCategoryRatioSliders(defaultRules);
+  toggleModal('category-modal', true);
+}
+
+function openCategoryEditModal(id) {
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat) return;
+  
+  document.getElementById('category-modal-title').textContent = 'カテゴリの編集';
+  document.getElementById('category-edit-id').value = cat.id;
+  document.getElementById('category-input-emoji').value = cat.emoji || '📂';
+  document.getElementById('category-input-name').value = cat.name;
+  
+  let rules = {};
+  try {
+    rules = typeof cat.split_rules === 'string' ? JSON.parse(cat.split_rules) : cat.split_rules;
+  } catch (e) {}
+  
+  generateCategoryRatioSliders(rules);
+  toggleModal('category-modal', true);
+}
+
+function saveCategoryFromForm() {
+  const id = document.getElementById('category-edit-id').value;
+  const name = document.getElementById('category-input-name').value.trim();
+  const emoji = document.getElementById('category-input-emoji').value.trim();
+  
+  if (!name) {
+    showToast('カテゴリ名を入力してください');
+    return;
+  }
+  
+  const split_rules = {};
+  const sliders = document.querySelectorAll('.ratio-slider-input');
+  let sum = 0;
+  
+  sliders.forEach(slider => {
+    const memberName = slider.closest('.ratio-slider-row').dataset.memberName;
+    const val = Number(slider.value);
+    split_rules[memberName] = val;
+    sum += val;
+  });
+  
+  if (sum !== 100) {
+    showToast('負担割合の合計が100%になっていません (現在 ' + sum + '%)');
+    return;
+  }
+  
+  const submitBtn = document.getElementById('btn-save-category');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 保存中...';
+  
+  const category = {
+    id: id || '',
+    name,
+    emoji,
+    split_rules: split_rules
+  };
+  
+  api.withSuccessHandler(res => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    toggleModal('category-modal', false);
+    
+    if (res && res.success) {
+      showToast('カテゴリを保存しました！');
+      loadApplicationData();
+    } else {
+      showToast('保存に失敗しました: ' + (res ? res.error : '空のレスポンス'));
+    }
+  }).withFailureHandler(err => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).saveCategory(activeSsId, category);
+}
+
+/**
+ * CLIENT DATE FORMATTING
+ */
+function formatDateStr(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${weekdays[d.getDay()]})`;
+}
+
+function hexToRgb(hex) {
+  if (!hex) return '99, 102, 241';
+  hex = hex.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  return `${r}, ${g}, ${b}`;
+}
+
+function escapeHTML(str) {
+  if (!str) return '';
+  return str.replace(/[&<>'"]/g, 
+    tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[tag] || tag)
+  );
+}
+</script>

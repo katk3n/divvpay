@@ -1,0 +1,17 @@
+{
+  "name": "divvpay",
+  "version": "1.0.0",
+  "description": "Smart reconciliation web app with friends using Google Spreadsheets",
+  "main": "build.js",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "keywords": [
+    "gas",
+    "apps-script",
+    "expense-split",
+    "reconciliation"
+  ],
+  "author": "",
+  "license": "ISC"
+}

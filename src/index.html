@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <base target="_top">
+  <title>DivvPay | 友人との立替・精算管理</title>
+  <!-- Material Symbols for premium Google UI icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  
+  <!-- Server-side template inclusion of CSS -->
+  <?!= HtmlService.createHtmlOutputFromFile('stylesheet').getContent(); ?>
+</head>
+<body>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">メッセージがここに表示されます</div>
+
+  <!-- 1. ONBOARDING VIEW (Shown when no spreadsheet ID is provided) -->
+  <div id="onboarding-view" class="onboarding-container fade-in-el" style="display: none;">
+    <div class="glass-card onboarding-card">
+      <div class="onboarding-logo">
+        <span class="material-symbols-outlined">payments</span>
+      </div>
+      <h1 class="onboarding-title">DivvPay</h1>
+      <p class="onboarding-subtitle">友人やグループでの立替費用をスマートに精算</p>
+      
+      <div class="onboarding-steps">
+        <div class="onboarding-step">
+          <span class="step-num">1</span>
+          <div class="step-text">
+            <h4>Google スプレッドシートを作成</h4>
+            <p>データを安全に保管するためのスプレッドシートを用意します。</p>
+          </div>
+        </div>
+        <div class="onboarding-step">
+          <span class="step-num">2</span>
+          <div class="step-text">
+            <h4>URL または ID をペースト</h4>
+            <p>スプレッドシートのURLを下の入力欄に入力します。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Segment Control to Switch Between New and Connect (NEW) -->
+      <div class="segment-control" style="margin-top: 24px; margin-bottom: 20px;">
+        <button id="seg-onboard-new" class="segment-btn active" onclick="switchOnboardTab('new')">新規シートを作成</button>
+        <button id="seg-onboard-connect" class="segment-btn" onclick="switchOnboardTab('connect')">既存のシートを接続</button>
+      </div>
+
+      <!-- Tab 1: Create New Sheet (NEW) -->
+      <div id="onboard-tab-new">
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label class="form-label" style="text-align: left;">イベント名（スプレッドシートのファイル名になります）</label>
+          <input type="text" id="onboarding-name-input" class="form-input" placeholder="例：卒業旅行の割り勘、週末バーベキュー" style="font-size: 13px;">
+        </div>
+        <button id="btn-create-sheet-onboarding" class="btn btn-primary" onclick="createNewSheetFromOnboarding()" style="height: 50px;">
+          <span class="material-symbols-outlined">rocket_launch</span>
+          精算シートを自動作成して開始
+        </button>
+      </div>
+
+      <!-- Tab 2: Connect Existing Sheet (NEW) -->
+      <div id="onboard-tab-connect" style="display: none;">
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label class="form-label" style="text-align: left;">スプレッドシートの URL または ID</label>
+          <input type="text" id="onboarding-ss-input" class="form-input" placeholder="https://docs.google.com/spreadsheets/d/..." style="font-size: 13px;">
+        </div>
+        <button id="btn-launch-onboarding" class="btn btn-primary" onclick="launchFromOnboarding()" style="height: 50px;">
+          <span class="material-symbols-outlined">link</span>
+          接続して開始する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. MAIN APPLICATION VIEW -->
+  <div id="main-app-view" class="glass-container" style="display: none;">
+    
+    <!-- Application Header -->
+    <header class="app-header fade-in-el">
+      <div class="logo-section">
+        <div class="logo-icon">
+          <span class="material-symbols-outlined">payments</span>
+        </div>
+        <h1 class="app-title">DivvPay</h1>
+      </div>
+      <div class="user-badge">
+        <span class="user-dot"></span>
+        <span id="header-user-email">Loading...</span>
+      </div>
+    </header>
+
+    <!-- Spreadsheet Dynamic Title -->
+    <div class="spreadsheet-title-container fade-in-el">
+      <h2 id="spreadsheet-name" class="spreadsheet-dynamic-title">読み込み中...</h2>
+    </div>
+
+    <!-- TAB 1: DASHBOARD -->
+    <main id="tab-dashboard" class="tab-content fade-in-el">
+      <!-- Total Unsettled Card -->
+      <div class="glass-card">
+        <h3 class="hero-total-title">グループ全体の未精算額</h3>
+        <div id="dashboard-total" class="hero-total-amount">0円</div>
+        
+        <!-- Money Transfer Explanation Box -->
+        <div id="dashboard-settlement-path" class="hero-summary-box">
+          <div class="hero-summary-icon">
+            <span class="material-symbols-outlined" style="color: var(--accent-indigo);">payments</span>
+          </div>
+          <div id="dashboard-settlement-text" class="hero-summary-text">
+            データを取得しています...
+          </div>
+        </div>
+        
+        <button id="btn-open-settle-modal" class="btn btn-primary" style="margin-top: 8px;">
+          <span class="material-symbols-outlined">check_circle</span>
+          今すぐ精算を確定する
+        </button>
+      </div>
+
+      <!-- Category Breakdown Card -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-cyan);">pie_chart</span>
+          カテゴリ別支出 (未精算)
+        </h3>
+        <div id="category-stats" class="category-stats-list">
+          <!-- Dynamic category list injected here -->
+          <div class="empty-state">
+            <div class="empty-state-icon">🎉</div>
+            <p>未精算の立替はありません。</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- TAB 2: REGISTER EXPENSE FORM -->
+    <main id="tab-add" class="tab-content fade-in-el" style="display: none;">
+      <div class="glass-card">
+        <h2 style="font-size: 20px; margin-bottom: 20px; text-align: center;">立替費用の登録</h2>
+        
+        <form id="expense-form" onsubmit="event.preventDefault();">
+          
+          <!-- Amount Input (Large & Styled) -->
+          <div class="form-group">
+            <label class="form-label">金額</label>
+            <div class="amount-input-wrapper">
+              <span class="amount-currency">¥</span>
+              <input type="number" id="input-amount" class="form-input amount-input" placeholder="0" required min="1" pattern="[0-9]*" inputmode="numeric">
+            </div>
+          </div>
+
+          <!-- Payer Selection (Dynamic Pills) -->
+          <div class="form-group">
+            <label class="form-label">支払った人</label>
+            <div id="form-payer-grid" class="pill-grid">
+              <!-- Dynamically injected members pills -->
+            </div>
+          </div>
+
+          <!-- Category Grid Select -->
+          <div class="form-group">
+            <label class="form-label">カテゴリ</label>
+            <div id="form-category-grid" class="category-grid">
+              <!-- Dynamic category list injected here -->
+            </div>
+          </div>
+
+          <!-- Date Selector -->
+          <div class="form-group">
+            <label class="form-label">日付</label>
+            <input type="date" id="input-date" class="form-input" required>
+          </div>
+
+          <!-- Memo / Description -->
+          <div class="form-group">
+            <label class="form-label">メモ (用途、店名など)</label>
+            <input type="text" id="input-description" class="form-input" placeholder="居酒屋、タクシー、スーパー等">
+          </div>
+
+          <button type="submit" id="btn-submit-expense" class="btn btn-primary" style="margin-top: 10px;">
+            <span class="material-symbols-outlined">add_task</span>
+            立替を登録する
+          </button>
+        </form>
+      </div>
+    </main>
+
+    <!-- TAB 3: EXPENSE HISTORY LIST -->
+    <main id="tab-history" class="tab-content fade-in-el" style="display: none;">
+      <!-- Segment Control (Unsettled / Settled) -->
+      <div class="segment-control">
+        <button id="seg-unsettled" class="segment-btn active" onclick="switchHistorySegment('unsettled')">未精算</button>
+        <button id="seg-settled" class="segment-btn" onclick="switchHistorySegment('settled')">精算済履歴</button>
+      </div>
+
+      <!-- Expense List Container -->
+      <div id="expense-list-container" class="expense-list">
+        <!-- Dynamically injected by JS -->
+      </div>
+      
+      <!-- Settlement History Container (hidden by default) -->
+      <div id="settlement-list-container" class="expense-list" style="display: none;">
+        <!-- Injected by JS -->
+      </div>
+    </main>
+
+    <!-- TAB 4: SETTINGS -->
+    <main id="tab-settings" class="tab-content fade-in-el" style="display: none;">
+      <!-- 1. Registered Accounts Card (Dynamic list) -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-indigo);">group</span>
+          メンバー管理
+        </h3>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
+          精算グループのメンバーを管理します。Googleアカウント（メールアドレス）を設定すると、ログインしたユーザー名が自動判別されます。
+        </p>
+        
+        <div id="settings-members-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+          <!-- Dynamically filled by JS -->
+        </div>
+        
+        <button onclick="openMemberCreateModal();" class="btn btn-secondary" style="width: 100%; height: 46px;">
+          <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span>
+          新規メンバーを追加する
+        </button>
+      </div>
+
+      <!-- 2. Category Settings Card -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-cyan);">category</span>
+          カテゴリ設定
+        </h3>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
+          立替費用の分類（カテゴリ）と、それぞれのメンバー間での基本負担割合を設定します。
+        </p>
+        
+        <div id="settings-categories-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+          <!-- Dynamically filled by JS -->
+        </div>
+        
+        <button onclick="openCategoryCreateModal();" class="btn btn-secondary" style="width: 100%; height: 46px;">
+          <span class="material-symbols-outlined" style="font-size: 18px;">add_circle</span>
+          新規カテゴリを追加する
+        </button>
+      </div>
+
+      <!-- App Diagnostics Card -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-cyan);">info</span>
+          システム情報
+        </h3>
+        <div class="detail-item">
+          <span class="detail-label">連携スプレッドシート</span>
+          <span class="detail-val">
+            <a id="settings-spreadsheet-link" href="#" target="_blank" style="color: var(--accent-cyan); text-decoration: none; display: flex; align-items: center; gap: 4px;">
+              開く <span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span>
+            </a>
+          </span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">データ保管状態</span>
+          <span class="detail-val" style="color: var(--accent-emerald);">正常接続中</span>
+        </div>
+        <div class="detail-item" style="border: none;">
+          <span class="detail-label">実行ユーザー権限</span>
+          <span id="settings-user-role" class="detail-val">制限付きメンバー</span>
+        </div>
+      </div>
+
+      <!-- 4. Group Switcher Card (NEW) -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-amber);">swap_horiz</span>
+          精算グループの切り替え
+        </h3>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
+          別のスプレッドシートを開くか、新しく精算シートを自動作成します。
+        </p>
+        <button onclick="resetToOnboarding();" class="btn btn-secondary" style="width: 100%; height: 46px;">
+          <span class="material-symbols-outlined" style="font-size: 18px;">settings_backup_restore</span>
+          別のシートを開く / 新規作成
+        </button>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="nav-panel">
+      <button class="nav-item active" onclick="switchTab('dashboard', this)">
+        <span class="material-symbols-outlined">dashboard</span>
+        ダッシュボード
+      </button>
+      <button class="nav-item" onclick="switchTab('add', this)">
+        <span class="material-symbols-outlined">add_circle</span>
+        登録
+      </button>
+      <button class="nav-item" onclick="switchTab('history', this)">
+        <span class="material-symbols-outlined">history</span>
+        履歴・一覧
+      </button>
+      <button class="nav-item" onclick="switchTab('settings', this)">
+        <span class="material-symbols-outlined">settings</span>
+        設定
+      </button>
+    </nav>
+  </div>
+
+  <!-- 3. ACCESS DENIED / ERROR PAGE (Hidden by default, shown if GAS error occurs) -->
+  <div id="access-denied-page" style="display: none;">
+    <div class="access-denied-container">
+      <div class="error-shield">
+        <span class="material-symbols-outlined" style="font-size: 80px;">gpp_bad</span>
+      </div>
+      <h2 style="font-family: var(--font-heading); font-size: 24px; margin-bottom: 12px;">エラーが発生しました</h2>
+      <p id="access-denied-message" style="color: var(--text-secondary); max-width: 360px; margin-bottom: 24px; font-size: 14px; line-height: 1.6;">
+        スプレッドシートの取得に失敗しました。URLパラメータが正しいか、またはスプレッドシートの閲覧権限があることを確認してください。
+      </p>
+      <div style="width: 100%; max-width: 280px; display: flex; flex-direction: column; gap: 12px; margin: 0 auto;">
+        <button onclick="window.location.reload();" class="btn btn-primary">
+          <span class="material-symbols-outlined">sync</span>
+          再読み込みする
+        </button>
+        <button onclick="resetToOnboarding();" class="btn btn-secondary">
+          <span class="material-symbols-outlined">settings_backup_restore</span>
+          最初から設定し直す
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EXPENSE DETAILS DRAWER -->
+  <div id="expense-modal" class="modal-overlay" onclick="closeExpenseModal(event)">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-expense-title">立替詳細</h3>
+        <button class="modal-close" onclick="toggleModal('expense-modal', false)">×</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="detail-item">
+          <span class="detail-label">日付</span>
+          <span id="detail-date" class="detail-val">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">支払った人</span>
+          <span id="detail-payer" class="detail-val">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">金額</span>
+          <span id="detail-amount" class="detail-val" style="font-size: 18px; color: var(--accent-indigo); font-family: var(--font-heading);">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">カテゴリ</span>
+          <span id="detail-category" class="detail-val">-</span>
+        </div>
+        <div class="detail-item" style="border-bottom: none;">
+          <span class="detail-label">メモ</span>
+          <span id="detail-description" class="detail-val">-</span>
+        </div>
+      </div>
+      
+      <input type="hidden" id="detail-id">
+      
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" onclick="toggleModal('expense-modal', false)">閉じる</button>
+        <button id="btn-delete-expense" class="btn btn-danger" onclick="confirmDeleteExpense()">
+          <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+          削除する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIRM SETTLEMENT -->
+  <div id="settle-modal" class="modal-overlay" onclick="closeSettleModal(event)">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>精算の確定</h3>
+        <button class="modal-close" onclick="toggleModal('settle-modal', false)">×</button>
+      </div>
+      <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.6;">
+        これまでに登録された全ての未精算データ（立替費用）を精算済みにします。
+        精算を確定して、履歴に記録しますか？
+      </p>
+      
+      <div id="modal-settle-summary-box" class="settlement-card-details" style="margin-bottom: 20px; font-weight: 500;">
+        <!-- Filled dynamically -->
+      </div>
+      
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" onclick="toggleModal('settle-modal', false)">キャンセル</button>
+        <button id="btn-confirm-settlement" class="btn btn-primary" onclick="executeSettlement()">
+          <span class="material-symbols-outlined" style="font-size: 18px;">price_check</span>
+          確定する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CATEGORY EDITOR -->
+  <div id="category-modal" class="modal-overlay" onclick="closeCategoryModal(event)">
+    <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h3 id="category-modal-title">カテゴリの設定</h3>
+        <button class="modal-close" onclick="toggleModal('category-modal', false)">×</button>
+      </div>
+      
+      <form id="category-form" onsubmit="event.preventDefault(); saveCategoryFromForm();">
+        <input type="hidden" id="category-edit-id">
+        
+        <!-- Category Name & Emoji -->
+        <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+          <div style="flex: 1;">
+            <label class="form-label" style="font-size: 11px;">絵文字</label>
+            <input type="text" id="category-input-emoji" class="form-input" placeholder="👥" required style="text-align: center; font-size: 18px; padding: 6px;">
+          </div>
+          <div style="flex: 4;">
+            <label class="form-label" style="font-size: 11px;">カテゴリ名</label>
+            <input type="text" id="category-input-name" class="form-input" placeholder="割り勘" required>
+          </div>
+        </div>
+        
+        <!-- Split Ratios Section -->
+        <div id="category-ratio-section" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-bottom: 20px;">
+          <h4 style="font-size: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <span>メンバーの負担割合 (%)</span>
+            <span id="category-ratio-sum-badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 700;">合計: 0%</span>
+          </h4>
+          <div id="category-ratio-sliders-container" style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Injected by JS based on active members -->
+          </div>
+        </div>
+        
+        <div class="modal-buttons" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 0;">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('category-modal', false)">キャンセル</button>
+          <button type="submit" id="btn-save-category" class="btn btn-primary">
+            <span class="material-symbols-outlined">save</span>
+            保存する
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MEMBER EDITOR (NEW) -->
+  <div id="member-modal" class="modal-overlay" onclick="closeMemberModal(event)">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="member-modal-title">メンバーの設定</h3>
+        <button class="modal-close" onclick="toggleModal('member-modal', false)">×</button>
+      </div>
+      
+      <form id="member-form" onsubmit="event.preventDefault(); saveMemberFromForm();">
+        <input type="hidden" id="member-edit-index">
+        <input type="hidden" id="member-original-name">
+        
+        <!-- Member Name -->
+        <div class="form-group">
+          <label class="form-label">名前</label>
+          <input type="text" id="member-input-name" class="form-input" placeholder="友人A" required>
+        </div>
+        
+        <!-- Member Email (Optional) -->
+        <div class="form-group">
+          <label class="form-label">メールアドレス（任意）</label>
+          <input type="email" id="member-input-email" class="form-input" placeholder="friend@example.com">
+          <p style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">
+            ※メールアドレスを入力すると、そのユーザーがWebアプリにアクセスした際に自動判別されます。
+          </p>
+        </div>
+        
+        <!-- Member Theme Color -->
+        <div class="form-group">
+          <label class="form-label">テーマカラー</label>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">
+            <input type="color" id="member-input-color" class="form-input" style="width: 50px; height: 40px; padding: 2px; cursor: pointer; border-radius: 8px;" value="#6366f1">
+            <span style="font-size: 12px; color: var(--text-secondary);">メンバーのアイコンやゲージに反映されます。</span>
+          </div>
+        </div>
+        
+        <div class="modal-buttons" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('member-modal', false)">キャンセル</button>
+          <button type="submit" id="btn-save-member" class="btn btn-primary">
+            <span class="material-symbols-outlined">save</span>
+            保存する
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Variable Injection from GAS server to client -->
+  <script>
+    const SPREADSHEET_ID = "<?= spreadsheetId ?>";
+  </script>
+
+  <!-- Server-side template inclusion of JavaScript -->
+  <?!= HtmlService.createHtmlOutputFromFile('javascript').getContent(); ?>
+</body>
+</html>
