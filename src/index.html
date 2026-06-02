@@ -366,13 +366,76 @@
       
       <input type="hidden" id="detail-id">
       
-      <div class="modal-buttons">
-        <button class="btn btn-secondary" onclick="toggleModal('expense-modal', false)">閉じる</button>
+      <div class="modal-buttons" style="grid-template-columns: 1fr 1fr; gap: 12px;">
         <button id="btn-delete-expense" class="btn btn-danger" onclick="confirmDeleteExpense()">
           <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
           削除する
         </button>
+        <button id="btn-edit-expense" class="btn btn-primary" onclick="openExpenseEditModalFromDetail()">
+          <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+          編集する
+        </button>
       </div>
+      <button class="btn btn-secondary" style="margin-top: 12px; width: 100%;" onclick="toggleModal('expense-modal', false)">閉じる</button>
+    </div>
+  </div>
+
+  <!-- MODAL: EXPENSE EDIT FORM -->
+  <div id="expense-edit-modal" class="modal-overlay" onclick="closeExpenseEditModal(event)">
+    <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h3>立替の編集</h3>
+        <button class="modal-close" onclick="toggleModal('expense-edit-modal', false)">×</button>
+      </div>
+      
+      <form id="expense-edit-form" onsubmit="event.preventDefault(); saveExpenseEdit();">
+        <input type="hidden" id="edit-expense-id">
+        
+        <!-- Amount Input (Large & Styled) -->
+        <div class="form-group">
+          <label class="form-label">金額</label>
+          <div class="amount-input-wrapper">
+            <span class="amount-currency">¥</span>
+            <input type="number" id="edit-input-amount" class="form-input amount-input" placeholder="0" required min="1" pattern="[0-9]*" inputmode="numeric">
+          </div>
+        </div>
+
+        <!-- Payer Selection (Dynamic Pills) -->
+        <div class="form-group">
+          <label class="form-label">支払った人</label>
+          <div id="edit-payer-grid" class="pill-grid">
+            <!-- Dynamically injected members pills -->
+          </div>
+        </div>
+
+        <!-- Category Grid Select -->
+        <div class="form-group">
+          <label class="form-label">カテゴリ</label>
+          <div id="edit-category-grid" class="category-grid">
+            <!-- Dynamic category list injected here -->
+          </div>
+        </div>
+
+        <!-- Date Selector -->
+        <div class="form-group">
+          <label class="form-label">日付</label>
+          <input type="date" id="edit-input-date" class="form-input" required>
+        </div>
+
+        <!-- Memo / Description -->
+        <div class="form-group">
+          <label class="form-label">メモ (用途、店名など)</label>
+          <input type="text" id="edit-input-description" class="form-input" placeholder="居酒屋、タクシー、スーパー等">
+        </div>
+
+        <div class="modal-buttons" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('expense-edit-modal', false)">キャンセル</button>
+          <button type="submit" id="btn-save-expense-edit" class="btn btn-primary">
+            <span class="material-symbols-outlined">save</span>
+            保存する
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

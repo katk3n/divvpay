@@ -365,6 +365,56 @@ function deleteExpense(spreadsheetId, id) {
 }
 
 /**
+ * Update an existing expense record.
+ */
+function updateExpense(spreadsheetId, expense) {
+  try {
+    var ss = getSpreadsheet(spreadsheetId);
+    var sheet = ss.getSheetByName(SHEETS.EXPENSES);
+    if (!sheet) throw new Error('Expenses sheet does not exist.');
+    
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0];
+    
+    var idCol = headers.indexOf('id');
+    var dateCol = headers.indexOf('date');
+    var payerCol = headers.indexOf('payer');
+    var amountCol = headers.indexOf('amount');
+    var categoryCol = headers.indexOf('category');
+    var descriptionCol = headers.indexOf('description');
+    var statusCol = headers.indexOf('status');
+    
+    if (idCol === -1) throw new Error('ID column not found.');
+    
+    var foundRow = -1;
+    for (var i = 1; i < values.length; i++) {
+      if (values[i][idCol] === expense.id) {
+        foundRow = i + 1; // 1-indexed and skip header
+        break;
+      }
+    }
+    
+    if (foundRow === -1) throw new Error('経費データが見つかりませんでした。');
+    
+    // Check if settled to prevent editing settled expenses
+    if (statusCol !== -1 && values[foundRow - 1][statusCol] === 'settled') {
+      throw new Error('精算済みの立替費用は編集できません。');
+    }
+    
+    if (dateCol !== -1) sheet.getRange(foundRow, dateCol + 1).setValue(expense.date);
+    if (payerCol !== -1) sheet.getRange(foundRow, payerCol + 1).setValue(sanitizeTextInput(expense.payer));
+    if (amountCol !== -1) sheet.getRange(foundRow, amountCol + 1).setValue(Number(expense.amount));
+    if (categoryCol !== -1) sheet.getRange(foundRow, categoryCol + 1).setValue(expense.category);
+    if (descriptionCol !== -1) sheet.getRange(foundRow, descriptionCol + 1).setValue(sanitizeTextInput(expense.description || ''));
+    
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+
+/**
  * Perform Settlement pairing and mark expenses as settled.
  */
 function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {

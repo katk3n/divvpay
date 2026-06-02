@@ -33,6 +33,7 @@ let state = {
 let currentHistorySegment = 'unsettled';
 let activeFormPayer = '';
 let categoryToSettle = '';
+let editFormPayer = '';
 
 // Check if running locally in a web browser
 const isLocal = window.location.hostname.indexOf('google') === -1;
@@ -118,6 +119,28 @@ const localBackendMock = {
     expenses = expenses.filter(e => e.id !== id);
     localStorage.setItem(expKey, JSON.stringify(expenses));
     
+    mockApiSuccess({ success: true }, success);
+  },
+
+  updateExpense: function(spreadsheetId, expense, success, failure) {
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    const expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
+    const idx = expenses.findIndex(e => e.id === expense.id);
+    if (idx === -1) {
+      setTimeout(() => failure(new Error('経費データが見つかりませんでした。')), 300);
+      return;
+    }
+    if (expenses[idx].status === 'settled') {
+      setTimeout(() => failure(new Error('精算済みの立替費用は編集できません。')), 300);
+      return;
+    }
+    expenses[idx].date = expense.date;
+    expenses[idx].payer = expense.payer;
+    expenses[idx].amount = Number(expense.amount);
+    expenses[idx].category = expense.category;
+    expenses[idx].description = expense.description || '';
+    
+    localStorage.setItem(expKey, JSON.stringify(expenses));
     mockApiSuccess({ success: true }, success);
   },
 
@@ -1051,6 +1074,10 @@ function closeExpenseModal(e) {
   if (e.target.id === 'expense-modal') toggleModal('expense-modal', false);
 }
 
+function closeExpenseEditModal(e) {
+  if (e.target.id === 'expense-edit-modal') toggleModal('expense-edit-modal', false);
+}
+
 function closeSettleModal(e) {
   if (e.target.id === 'settle-modal') toggleModal('settle-modal', false);
 }
@@ -1607,5 +1634,149 @@ function escapeHTML(str) {
       '"': '&quot;'
     }[tag] || tag)
   );
+}
+
+/**
+ * EXPENSE EDITING SYSTEM (NEW FEATURE)
+ */
+function renderEditPayerSelectorGrid() {
+  const container = document.getElementById('edit-payer-grid');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.members.length === 0) {
+    container.innerHTML = '<div style="color: var(--text-secondary); grid-column: 1/-1; text-align: center; font-size: 13px;">メンバーを先に設定してください。</div>';
+    return;
+  }
+  
+  state.members.forEach(m => {
+    const pill = document.createElement('div');
+    pill.className = 'pill-option';
+    if (m.id === editFormPayer) {
+      pill.classList.add('active');
+      pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
+      pill.style.borderColor = m.color;
+    }
+    pill.dataset.payerId = m.id;
+    pill.style.setProperty('--shadow-color', m.color + '40');
+    
+    pill.innerHTML = `
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: ${m.color}; display: inline-block;"></span>
+      <span>${escapeHTML(m.name)}</span>
+    `;
+    
+    pill.addEventListener('click', () => {
+      container.querySelectorAll('.pill-option').forEach(el => {
+        el.classList.remove('active');
+        el.style.background = '';
+        el.style.borderColor = '';
+      });
+      pill.classList.add('active');
+      pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
+      pill.style.borderColor = m.color;
+      editFormPayer = m.id;
+    });
+    
+    container.appendChild(pill);
+  });
+}
+
+function renderEditCategorySelectorGrid(selectedCategoryId) {
+  const grid = document.getElementById('edit-category-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  
+  if (state.categories.length === 0) {
+    grid.innerHTML = '<div style="color: var(--text-secondary); grid-column: 1/-1; text-align: center; padding: 12px; font-size: 13px;">カテゴリが登録されていません。設定から追加してください。</div>';
+    return;
+  }
+  
+  state.categories.forEach(cat => {
+    const opt = document.createElement('div');
+    opt.className = 'category-option';
+    if (cat.id === selectedCategoryId) opt.classList.add('active');
+    opt.dataset.categoryId = cat.id;
+    opt.innerHTML = `
+      <span class="cat-icon">${escapeHTML(cat.emoji || '📂')}</span>
+      <span>${escapeHTML(cat.name)}</span>
+    `;
+    opt.addEventListener('click', () => {
+      grid.querySelectorAll('.category-option').forEach(el => el.classList.remove('active'));
+      opt.classList.add('active');
+    });
+    grid.appendChild(opt);
+  });
+}
+
+function openExpenseEditModalFromDetail() {
+  const id = document.getElementById('detail-id').value;
+  if (!id) return;
+  
+  const expense = state.expenses.find(e => e.id === id);
+  if (!expense) {
+    showToast('データが見つかりません');
+    return;
+  }
+  
+  if (expense.status === 'settled') {
+    showToast('精算済みの立替費用は編集できません');
+    return;
+  }
+  
+  // Close detail drawer
+  toggleModal('expense-modal', false);
+  
+  // Populate form fields
+  document.getElementById('edit-expense-id').value = expense.id;
+  document.getElementById('edit-input-amount').value = expense.amount;
+  document.getElementById('edit-input-date').value = expense.date.split('T')[0]; // Ensure correct formatting for input type=date
+  document.getElementById('edit-input-description').value = expense.description || '';
+  
+  editFormPayer = expense.payer;
+  renderEditPayerSelectorGrid();
+  renderEditCategorySelectorGrid(expense.category);
+  
+  // Open edit modal
+  toggleModal('expense-edit-modal', true);
+}
+
+function saveExpenseEdit() {
+  const id = document.getElementById('edit-expense-id').value;
+  const amount = document.getElementById('edit-input-amount').value;
+  const payer = editFormPayer;
+  
+  const categoryOption = document.querySelector('#edit-category-grid .category-option.active');
+  const category = categoryOption ? (categoryOption.dataset.categoryId || categoryOption.dataset.category) : '';
+  
+  const date = document.getElementById('edit-input-date').value;
+  const description = document.getElementById('edit-input-description').value;
+  
+  if (!amount || !payer || !date) {
+    showToast('入力項目を確認してください');
+    return;
+  }
+  
+  const saveBtn = document.getElementById('btn-save-expense-edit');
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 保存中...';
+  
+  const expense = { id, amount, payer, category, date, description };
+  
+  api.withSuccessHandler(res => {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    toggleModal('expense-edit-modal', false);
+    
+    if (res && res.success) {
+      showToast('立替費用を更新しました！');
+      loadApplicationData();
+    } else {
+      showToast('更新に失敗しました: ' + (res ? res.error : 'サーバーレスポンスが空です。'));
+    }
+  }).withFailureHandler(err => {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).updateExpense(activeSsId, expense);
 }
 </script>

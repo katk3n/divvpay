@@ -1306,13 +1306,76 @@ h1, h2, h3, h4 {
       
       <input type="hidden" id="detail-id">
       
-      <div class="modal-buttons">
-        <button class="btn btn-secondary" onclick="toggleModal('expense-modal', false)">閉じる</button>
+      <div class="modal-buttons" style="grid-template-columns: 1fr 1fr; gap: 12px;">
         <button id="btn-delete-expense" class="btn btn-danger" onclick="confirmDeleteExpense()">
           <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
           削除する
         </button>
+        <button id="btn-edit-expense" class="btn btn-primary" onclick="openExpenseEditModalFromDetail()">
+          <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+          編集する
+        </button>
       </div>
+      <button class="btn btn-secondary" style="margin-top: 12px; width: 100%;" onclick="toggleModal('expense-modal', false)">閉じる</button>
+    </div>
+  </div>
+
+  <!-- MODAL: EXPENSE EDIT FORM -->
+  <div id="expense-edit-modal" class="modal-overlay" onclick="closeExpenseEditModal(event)">
+    <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h3>立替の編集</h3>
+        <button class="modal-close" onclick="toggleModal('expense-edit-modal', false)">×</button>
+      </div>
+      
+      <form id="expense-edit-form" onsubmit="event.preventDefault(); saveExpenseEdit();">
+        <input type="hidden" id="edit-expense-id">
+        
+        <!-- Amount Input (Large & Styled) -->
+        <div class="form-group">
+          <label class="form-label">金額</label>
+          <div class="amount-input-wrapper">
+            <span class="amount-currency">¥</span>
+            <input type="number" id="edit-input-amount" class="form-input amount-input" placeholder="0" required min="1" pattern="[0-9]*" inputmode="numeric">
+          </div>
+        </div>
+
+        <!-- Payer Selection (Dynamic Pills) -->
+        <div class="form-group">
+          <label class="form-label">支払った人</label>
+          <div id="edit-payer-grid" class="pill-grid">
+            <!-- Dynamically injected members pills -->
+          </div>
+        </div>
+
+        <!-- Category Grid Select -->
+        <div class="form-group">
+          <label class="form-label">カテゴリ</label>
+          <div id="edit-category-grid" class="category-grid">
+            <!-- Dynamic category list injected here -->
+          </div>
+        </div>
+
+        <!-- Date Selector -->
+        <div class="form-group">
+          <label class="form-label">日付</label>
+          <input type="date" id="edit-input-date" class="form-input" required>
+        </div>
+
+        <!-- Memo / Description -->
+        <div class="form-group">
+          <label class="form-label">メモ (用途、店名など)</label>
+          <input type="text" id="edit-input-description" class="form-input" placeholder="居酒屋、タクシー、スーパー等">
+        </div>
+
+        <div class="modal-buttons" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('expense-edit-modal', false)">キャンセル</button>
+          <button type="submit" id="btn-save-expense-edit" class="btn btn-primary">
+            <span class="material-symbols-outlined">save</span>
+            保存する
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -1476,6 +1539,7 @@ let state = {
 let currentHistorySegment = 'unsettled';
 let activeFormPayer = '';
 let categoryToSettle = '';
+let editFormPayer = '';
 
 // Check if running locally in a web browser
 const isLocal = window.location.hostname.indexOf('google') === -1;
@@ -1561,6 +1625,28 @@ const localBackendMock = {
     expenses = expenses.filter(e => e.id !== id);
     localStorage.setItem(expKey, JSON.stringify(expenses));
     
+    mockApiSuccess({ success: true }, success);
+  },
+
+  updateExpense: function(spreadsheetId, expense, success, failure) {
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    const expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
+    const idx = expenses.findIndex(e => e.id === expense.id);
+    if (idx === -1) {
+      setTimeout(() => failure(new Error('経費データが見つかりませんでした。')), 300);
+      return;
+    }
+    if (expenses[idx].status === 'settled') {
+      setTimeout(() => failure(new Error('精算済みの立替費用は編集できません。')), 300);
+      return;
+    }
+    expenses[idx].date = expense.date;
+    expenses[idx].payer = expense.payer;
+    expenses[idx].amount = Number(expense.amount);
+    expenses[idx].category = expense.category;
+    expenses[idx].description = expense.description || '';
+    
+    localStorage.setItem(expKey, JSON.stringify(expenses));
     mockApiSuccess({ success: true }, success);
   },
 
@@ -2494,6 +2580,10 @@ function closeExpenseModal(e) {
   if (e.target.id === 'expense-modal') toggleModal('expense-modal', false);
 }
 
+function closeExpenseEditModal(e) {
+  if (e.target.id === 'expense-edit-modal') toggleModal('expense-edit-modal', false);
+}
+
 function closeSettleModal(e) {
   if (e.target.id === 'settle-modal') toggleModal('settle-modal', false);
 }
@@ -3050,6 +3140,150 @@ function escapeHTML(str) {
       '"': '&quot;'
     }[tag] || tag)
   );
+}
+
+/**
+ * EXPENSE EDITING SYSTEM (NEW FEATURE)
+ */
+function renderEditPayerSelectorGrid() {
+  const container = document.getElementById('edit-payer-grid');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.members.length === 0) {
+    container.innerHTML = '<div style="color: var(--text-secondary); grid-column: 1/-1; text-align: center; font-size: 13px;">メンバーを先に設定してください。</div>';
+    return;
+  }
+  
+  state.members.forEach(m => {
+    const pill = document.createElement('div');
+    pill.className = 'pill-option';
+    if (m.id === editFormPayer) {
+      pill.classList.add('active');
+      pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
+      pill.style.borderColor = m.color;
+    }
+    pill.dataset.payerId = m.id;
+    pill.style.setProperty('--shadow-color', m.color + '40');
+    
+    pill.innerHTML = `
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: ${m.color}; display: inline-block;"></span>
+      <span>${escapeHTML(m.name)}</span>
+    `;
+    
+    pill.addEventListener('click', () => {
+      container.querySelectorAll('.pill-option').forEach(el => {
+        el.classList.remove('active');
+        el.style.background = '';
+        el.style.borderColor = '';
+      });
+      pill.classList.add('active');
+      pill.style.background = `rgba(${hexToRgb(m.color)}, 0.15)`;
+      pill.style.borderColor = m.color;
+      editFormPayer = m.id;
+    });
+    
+    container.appendChild(pill);
+  });
+}
+
+function renderEditCategorySelectorGrid(selectedCategoryId) {
+  const grid = document.getElementById('edit-category-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  
+  if (state.categories.length === 0) {
+    grid.innerHTML = '<div style="color: var(--text-secondary); grid-column: 1/-1; text-align: center; padding: 12px; font-size: 13px;">カテゴリが登録されていません。設定から追加してください。</div>';
+    return;
+  }
+  
+  state.categories.forEach(cat => {
+    const opt = document.createElement('div');
+    opt.className = 'category-option';
+    if (cat.id === selectedCategoryId) opt.classList.add('active');
+    opt.dataset.categoryId = cat.id;
+    opt.innerHTML = `
+      <span class="cat-icon">${escapeHTML(cat.emoji || '📂')}</span>
+      <span>${escapeHTML(cat.name)}</span>
+    `;
+    opt.addEventListener('click', () => {
+      grid.querySelectorAll('.category-option').forEach(el => el.classList.remove('active'));
+      opt.classList.add('active');
+    });
+    grid.appendChild(opt);
+  });
+}
+
+function openExpenseEditModalFromDetail() {
+  const id = document.getElementById('detail-id').value;
+  if (!id) return;
+  
+  const expense = state.expenses.find(e => e.id === id);
+  if (!expense) {
+    showToast('データが見つかりません');
+    return;
+  }
+  
+  if (expense.status === 'settled') {
+    showToast('精算済みの立替費用は編集できません');
+    return;
+  }
+  
+  // Close detail drawer
+  toggleModal('expense-modal', false);
+  
+  // Populate form fields
+  document.getElementById('edit-expense-id').value = expense.id;
+  document.getElementById('edit-input-amount').value = expense.amount;
+  document.getElementById('edit-input-date').value = expense.date.split('T')[0]; // Ensure correct formatting for input type=date
+  document.getElementById('edit-input-description').value = expense.description || '';
+  
+  editFormPayer = expense.payer;
+  renderEditPayerSelectorGrid();
+  renderEditCategorySelectorGrid(expense.category);
+  
+  // Open edit modal
+  toggleModal('expense-edit-modal', true);
+}
+
+function saveExpenseEdit() {
+  const id = document.getElementById('edit-expense-id').value;
+  const amount = document.getElementById('edit-input-amount').value;
+  const payer = editFormPayer;
+  
+  const categoryOption = document.querySelector('#edit-category-grid .category-option.active');
+  const category = categoryOption ? (categoryOption.dataset.categoryId || categoryOption.dataset.category) : '';
+  
+  const date = document.getElementById('edit-input-date').value;
+  const description = document.getElementById('edit-input-description').value;
+  
+  if (!amount || !payer || !date) {
+    showToast('入力項目を確認してください');
+    return;
+  }
+  
+  const saveBtn = document.getElementById('btn-save-expense-edit');
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 保存中...';
+  
+  const expense = { id, amount, payer, category, date, description };
+  
+  api.withSuccessHandler(res => {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    toggleModal('expense-edit-modal', false);
+    
+    if (res && res.success) {
+      showToast('立替費用を更新しました！');
+      loadApplicationData();
+    } else {
+      showToast('更新に失敗しました: ' + (res ? res.error : 'サーバーレスポンスが空です。'));
+    }
+  }).withFailureHandler(err => {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    showToast('エラーが発生しました: ' + err.message);
+  }).updateExpense(activeSsId, expense);
 }
 </script>
 
