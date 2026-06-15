@@ -1049,6 +1049,27 @@ function renderExpenseHistory() {
       
       const settledExpenses = state.expenses.filter(e => e.settlement_id === s.id);
       
+      // Find target event label
+      const eventIds = [...new Set(settledExpenses.map(e => e.event_id || ''))];
+      let eventLabel = '';
+      if (eventIds.length === 1) {
+        if (eventIds[0] === '') {
+          eventLabel = 'イベント: 指定なし';
+        } else {
+          const evt = state.events.find(ev => ev.id === eventIds[0]);
+          eventLabel = evt ? `イベント: ${evt.name}` : 'イベント: 不明';
+        }
+      } else if (eventIds.length > 1) {
+        const names = eventIds.map(id => {
+          if (id === '') return '指定なし';
+          const evt = state.events.find(ev => ev.id === id);
+          return evt ? evt.name : '不明';
+        });
+        eventLabel = `イベント: ${names.join(', ')}`;
+      } else {
+        eventLabel = 'イベント: 指定なし';
+      }
+      
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -1058,9 +1079,10 @@ function renderExpenseHistory() {
           <span style="font-size: 12px; color: var(--text-muted);">${formatDateStr(s.date)}</span>
         </div>
         
-        <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-secondary); border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
+        <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-secondary); border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px; flex-wrap: wrap; gap: 4px 12px;">
           <span>精算総額: <b style="color: white;">${Number(s.total_amount).toLocaleString()}円</b></span>
           <span>精算者: ${escapeHTML(s.settler || 'システム')}</span>
+          <span style="width: 100%; font-size: 11px; color: var(--accent-amber); margin-top: 2px;">📅 ${escapeHTML(eventLabel)}</span>
         </div>
         
         <div class="settlement-card-details">
