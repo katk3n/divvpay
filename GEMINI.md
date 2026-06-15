@@ -66,6 +66,7 @@ Registered ledger of group costs.
 | `status` | String | `'unsettled'` or `'settled'` |
 | `settlement_id` | String | Blank if unsettled, references `settlements.id` once cleared |
 | `created_at` | String | ISO Timestamp |
+| `event_id` | String | Optional Event ID (`evt_...`) linked to this expense |
 
 ### 4. `settlements`
 Reconciliation history.
@@ -76,6 +77,15 @@ Reconciliation history.
 | `settler` | String | Name of the person who initiated the settlement |
 | `total_amount` | Number | Sum of cleared expenses |
 | `details` | String | Formatted text showing cash transfer paths |
+| `created_at` | String | ISO Timestamp |
+
+### 5. `events`
+Dynamic list of events for separate tracking and reconciliation.
+| Column | Type | Description |
+|---|---|---|
+| `id` | String | Unique ID (`evt_...`) |
+| `name` | String | Human-readable name |
+| `status` | String | `'active'` or `'settled'` |
 | `created_at` | String | ISO Timestamp |
 
 ---
