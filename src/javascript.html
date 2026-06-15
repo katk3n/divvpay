@@ -26,6 +26,7 @@ let state = {
   settlements: [],
   members: [],
   categories: [],
+  events: [],
   spreadsheetUrl: '#',
   spreadsheetName: 'DivvPay スプレッドシート'
 };
@@ -33,7 +34,9 @@ let state = {
 let currentHistorySegment = 'unsettled';
 let activeFormPayer = '';
 let categoryToSettle = '';
+let eventToSettle = '';
 let editFormPayer = '';
+
 
 // Check if running locally in a web browser
 const isLocal = window.location.hostname.indexOf('google') === -1;
@@ -61,7 +64,11 @@ const localBackendMock = {
     const catKey = `divvpay_categories_${spreadsheetId}`;
     const expKey = `divvpay_expenses_${spreadsheetId}`;
     const setKey = `divvpay_settlements_${spreadsheetId}`;
+    const evtKey = `divvpay_events_${spreadsheetId}`;
 
+    if (!localStorage.getItem(evtKey)) {
+      localStorage.setItem(evtKey, JSON.stringify([]));
+    }
     if (!localStorage.getItem(memKey)) {
       localStorage.setItem(memKey, JSON.stringify([
         { id: 'mem_1', name: '自分', email: 'me@example.com', color: '#6366f1' },
@@ -78,8 +85,8 @@ const localBackendMock = {
     }
     if (!localStorage.getItem(expKey)) {
       localStorage.setItem(expKey, JSON.stringify([
-        { id: 'exp_1', date: new Date().toISOString().split('T')[0], payer: 'mem_1', amount: 4500, category: 'cat_1', description: 'みんなのランチ代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() },
-        { id: 'exp_2', date: new Date().toISOString().split('T')[0], payer: 'mem_2', amount: 3000, category: 'cat_2', description: 'カフェ・お茶代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString() }
+        { id: 'exp_1', date: new Date().toISOString().split('T')[0], payer: 'mem_1', amount: 4500, category: 'cat_1', description: 'みんなのランチ代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString(), event_id: '' },
+        { id: 'exp_2', date: new Date().toISOString().split('T')[0], payer: 'mem_2', amount: 3000, category: 'cat_2', description: 'カフェ・お茶代', status: 'unsettled', settlement_id: '', created_at: new Date().toISOString(), event_id: '' }
       ]));
     }
     if (!localStorage.getItem(setKey)) {
@@ -93,6 +100,7 @@ const localBackendMock = {
       settlements: JSON.parse(localStorage.getItem(setKey)),
       members: JSON.parse(localStorage.getItem(memKey)),
       categories: JSON.parse(localStorage.getItem(catKey)),
+      events: JSON.parse(localStorage.getItem(evtKey)) || [],
       spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/edit',
       spreadsheetName: '【開発用Mock】' + (localStorage.getItem('divvpay_mock_name_' + spreadsheetId) || '旅行の割り勘精算')
     };
@@ -107,6 +115,7 @@ const localBackendMock = {
     expense.status = 'unsettled';
     expense.settlement_id = '';
     expense.created_at = new Date().toISOString();
+    if (!expense.event_id) expense.event_id = '';
     expenses.push(expense);
     localStorage.setItem(expKey, JSON.stringify(expenses));
     
@@ -139,51 +148,113 @@ const localBackendMock = {
     expenses[idx].amount = Number(expense.amount);
     expenses[idx].category = expense.category;
     expenses[idx].description = expense.description || '';
+    expenses[idx].event_id = expense.event_id || '';
     
     localStorage.setItem(expKey, JSON.stringify(expenses));
     mockApiSuccess({ success: true }, success);
   },
 
-  settleExpenses: function(spreadsheetId, settlerName, categoryId, success, failure) {
+  settleExpenses: function(spreadsheetId, settlerName, categoryId, eventId, success, failure) {
     const memKey = `divvpay_members_${spreadsheetId}`;
     const catKey = `divvpay_categories_${spreadsheetId}`;
     const expKey = `divvpay_expenses_${spreadsheetId}`;
     const setKey = `divvpay_settlements_${spreadsheetId}`;
+    const evtKey = `divvpay_events_${spreadsheetId}`;
 
     const expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
     const members = JSON.parse(localStorage.getItem(memKey) || '[]');
     const categories = JSON.parse(localStorage.getItem(catKey) || '[]');
     const settlements = JSON.parse(localStorage.getItem(setKey) || '[]');
+    const events = JSON.parse(localStorage.getItem(evtKey) || '[]');
+    
+    let actualCategoryId = categoryId;
+    let actualEventId = eventId;
+    let actualSuccess = success;
+    let actualFailure = failure;
+    
+    if (typeof actualCategoryId === 'function') {
+      actualCategoryId = '';
+      actualEventId = '';
+      actualSuccess = categoryId;
+      actualFailure = eventId;
+    } else if (typeof actualEventId === 'function') {
+      actualEventId = '';
+      actualSuccess = eventId;
+      actualFailure = success;
+    }
     
     const unsettled = expenses.filter(e => {
-      const matchCat = !categoryId || e.category === categoryId;
-      return e.status === 'unsettled' && matchCat;
+      const matchCat = !actualCategoryId || e.category === actualCategoryId;
+      let matchEvt = true;
+      if (actualEventId) {
+        if (actualEventId === '_no_event_') {
+          matchEvt = !e.event_id;
+        } else {
+          matchEvt = e.event_id === actualEventId;
+        }
+      }
+      return e.status === 'unsettled' && matchCat && matchEvt;
     });
     
     if (unsettled.length === 0) {
-      setTimeout(() => failure(new Error('未精算の立替がありません。')), 300);
+      setTimeout(() => actualFailure(new Error('未精算の立替がありません。')), 300);
       return;
     }
     
     const calculation = calculateClientSettlement(unsettled, members, categories);
+    const settlementId = 'set_' + new Date().getTime() + '_' + Math.random().toString(36).substr(2, 5);
     
     // Mark settled
     expenses.forEach(e => {
-      const matchCat = !categoryId || e.category === categoryId;
-      if (e.status === 'unsettled' && matchCat) {
+      const matchCat = !actualCategoryId || e.category === actualCategoryId;
+      let matchEvt = true;
+      if (actualEventId) {
+        if (actualEventId === '_no_event_') {
+          matchEvt = !e.event_id;
+        } else {
+          matchEvt = e.event_id === actualEventId;
+        }
+      }
+      if (e.status === 'unsettled' && matchCat && matchEvt) {
         e.status = 'settled';
-        e.settlement_id = 'set_' + new Date().getTime();
+        e.settlement_id = settlementId;
       }
     });
     localStorage.setItem(expKey, JSON.stringify(expenses));
     
+    let eventsToMarkSettled = [];
+    if (actualEventId) {
+      if (actualEventId !== '_no_event_') {
+        eventsToMarkSettled.push(actualEventId);
+      }
+    } else if (!actualCategoryId) {
+      const uniqueEvtIds = new Set();
+      unsettled.forEach(e => {
+        if (e.event_id) uniqueEvtIds.add(e.event_id);
+      });
+      eventsToMarkSettled = Array.from(uniqueEvtIds);
+    }
+    
+    if (eventsToMarkSettled.length > 0) {
+      eventsToMarkSettled.forEach(eId => {
+        const evtIdx = events.findIndex(evt => evt.id === eId);
+        if (evtIdx !== -1) {
+          events[evtIdx].status = 'settled';
+        }
+      });
+      localStorage.setItem(evtKey, JSON.stringify(events));
+    }
+    
     let detailsText = calculation.text;
-    const cat = categories.find(c => c.id === categoryId);
+    const cat = categories.find(c => c.id === actualCategoryId);
     if (cat) {
       detailsText = `【精算対象：${cat.emoji} ${cat.name}】\n` + detailsText;
     }
+    const evt = events.find(ev => ev.id === actualEventId);
+    if (evt) {
+      detailsText = `【精算対象：${evt.name}】\n` + detailsText;
+    }
     
-    const settlementId = 'set_' + new Date().getTime();
     const newSettlement = {
       id: settlementId,
       date: new Date().toLocaleDateString('ja-JP'),
@@ -198,7 +269,49 @@ const localBackendMock = {
     mockApiSuccess({
       success: true,
       settlement: newSettlement
-    }, success);
+    }, actualSuccess);
+  },
+
+  addEvent: function(spreadsheetId, event, success, failure) {
+    const evtKey = `divvpay_events_${spreadsheetId}`;
+    const events = JSON.parse(localStorage.getItem(evtKey) || '[]');
+    const id = 'evt_' + new Date().getTime();
+    event.id = id;
+    event.status = 'active';
+    event.created_at = new Date().toISOString();
+    events.push(event);
+    localStorage.setItem(evtKey, JSON.stringify(events));
+    mockApiSuccess({ success: true, eventId: id }, success);
+  },
+  
+  updateEvent: function(spreadsheetId, event, success, failure) {
+    const evtKey = `divvpay_events_${spreadsheetId}`;
+    const events = JSON.parse(localStorage.getItem(evtKey) || '[]');
+    const idx = events.findIndex(e => e.id === event.id);
+    if (idx === -1) {
+      setTimeout(() => failure(new Error('イベントが見つかりませんでした。')), 300);
+      return;
+    }
+    events[idx].name = event.name;
+    events[idx].status = event.status;
+    localStorage.setItem(evtKey, JSON.stringify(events));
+    mockApiSuccess({ success: true }, success);
+  },
+  
+  deleteEvent: function(spreadsheetId, id, success, failure) {
+    const expKey = `divvpay_expenses_${spreadsheetId}`;
+    const expenses = JSON.parse(localStorage.getItem(expKey) || '[]');
+    const hasExpenses = expenses.some(e => e.event_id === id);
+    if (hasExpenses) {
+      setTimeout(() => failure(new Error('このイベントには立替費用が登録されているため削除できません。')), 300);
+      return;
+    }
+    
+    const evtKey = `divvpay_events_${spreadsheetId}`;
+    let events = JSON.parse(localStorage.getItem(evtKey) || '[]');
+    events = events.filter(e => e.id !== id);
+    localStorage.setItem(evtKey, JSON.stringify(events));
+    mockApiSuccess({ success: true }, success);
   },
 
   saveCategory: function(spreadsheetId, category, success, failure) {
@@ -254,6 +367,8 @@ const googleMock = {
   }
 };
 
+
+
 // Routing client API
 const api = isLocal ? googleMock.script.run : google.script.run;
 
@@ -268,8 +383,10 @@ window.addEventListener('DOMContentLoaded', () => {
   // Form submission setup
   document.getElementById('expense-form').addEventListener('submit', registerExpense);
   
+
+  
   // Modal buttons setup
-  document.getElementById('btn-open-settle-modal').addEventListener('click', () => openSettlementConfirmModal(''));
+  document.getElementById('btn-open-settle-modal').addEventListener('click', () => openSettlementConfirmModal('', ''));
   
   // Initialize application view states
   if (!activeSsId) {
@@ -466,6 +583,7 @@ function loadApplicationData() {
       state.settlements = response.settlements || [];
       state.members = response.members || [];
       state.categories = response.categories || [];
+      state.events = response.events || [];
       state.spreadsheetUrl = response.spreadsheetUrl;
       state.spreadsheetName = response.spreadsheetName || 'DivvPay スプレッドシート';
       
@@ -489,10 +607,12 @@ function loadApplicationData() {
       
       renderPayerSelectorGrid();
       renderCategorySelectorGrid();
+      renderEventSelectors();
       renderDashboard();
       renderExpenseHistory();
       renderSettingsMembers();
       renderSettingsCategories();
+      renderSettingsEvents();
     } else {
       const errorMsg = response ? response.error : 'サーバーからのレスポンスが空です。\n\n【原因の可能性】\n1. Google Apps Scriptの初回実行に伴う承認（アクセス許可）が完了していない。\n2. スプレッドシートIDが間違っている、または閲覧権限がない。\n\n【対策】\nスプレッドシートのメニュー「拡張機能」＞「Apps Script」から、一度手動で「getInitialData」を実行し、画面上の許可ポップアップで承認を行ってください。その後、本アプリを再読み込みしてください。';
       showErrorPage(errorMsg);
@@ -738,53 +858,106 @@ function renderDashboard() {
         <div class="empty-state-icon">🎉</div>
         <p style="font-size: 14px;">立替データはありません</p>
       </div>`;
-    return;
-  }
-  
-  // Group categories
-  const catSum = {};
-  let maxCatAmount = 0;
-  
-  unsettled.forEach(e => {
-    const catId = e.category || 'cat_other';
-    catSum[catId] = (catSum[catId] || 0) + Number(e.amount);
-    if (catSum[catId] > maxCatAmount) maxCatAmount = catSum[catId];
-  });
-  
-  Object.keys(catSum).sort((a,b) => catSum[b] - catSum[a]).forEach(catId => {
-    const amount = catSum[catId];
-    const percentage = maxCatAmount > 0 ? (amount / maxCatAmount) * 100 : 0;
+  } else {
+    // Group categories
+    const catSum = {};
+    let maxCatAmount = 0;
     
-    // Find category info
-    const cat = state.categories.find(c => c.id === catId || c.name === catId);
-    const catName = cat ? cat.name : 'その他';
-    const catEmoji = cat ? cat.emoji : '📂';
+    unsettled.forEach(e => {
+      const catId = e.category || 'cat_other';
+      catSum[catId] = (catSum[catId] || 0) + Number(e.amount);
+      if (catSum[catId] > maxCatAmount) maxCatAmount = catSum[catId];
+    });
     
-    const row = document.createElement('div');
-    row.className = 'category-stat-row';
-    row.innerHTML = `
-      <div class="category-stat-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-        <span>${catEmoji} ${catName}</span>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-family: var(--font-heading); font-weight: 700; font-size: 14px;">${amount.toLocaleString()}円</span>
-          <button class="btn btn-settle-cat" style="width: auto; padding: 6px 14px; font-size: 11px; border-radius: 20px; background: linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan)); color: white; border: none; box-shadow: 0 0 10px rgba(6, 182, 212, 0.45); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;" onclick="openSettlementConfirmModal('${catId}')">
-            <span class="material-symbols-outlined" style="font-size: 13px;">price_check</span>
-            精算
-          </button>
+    Object.keys(catSum).sort((a,b) => catSum[b] - catSum[a]).forEach(catId => {
+      const amount = catSum[catId];
+      const percentage = maxCatAmount > 0 ? (amount / maxCatAmount) * 100 : 0;
+      
+      // Find category info
+      const cat = state.categories.find(c => c.id === catId || c.name === catId);
+      const catName = cat ? cat.name : 'その他';
+      const catEmoji = cat ? cat.emoji : '📂';
+      
+      const row = document.createElement('div');
+      row.className = 'category-stat-row';
+      row.innerHTML = `
+        <div class="category-stat-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <span>${catEmoji} ${catName}</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-family: var(--font-heading); font-weight: 700; font-size: 14px;">${amount.toLocaleString()}円</span>
+            <button class="btn btn-settle-cat" style="width: auto; padding: 6px 14px; font-size: 11px; border-radius: 20px; background: linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan)); color: white; border: none; box-shadow: 0 0 10px rgba(6, 182, 212, 0.45); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;" onclick="openSettlementConfirmModal('${catId}', '')">
+              <span class="material-symbols-outlined" style="font-size: 13px;">price_check</span>
+              精算
+            </button>
+          </div>
         </div>
-      </div>
-      <div class="category-progress-bg" style="margin-top: 6px;">
-        <div class="category-progress-bar" style="width: 0%;"></div>
-      </div>
-    `;
-    catStatsContainer.appendChild(row);
+        <div class="category-progress-bg" style="margin-top: 6px;">
+          <div class="category-progress-bar" style="width: 0%;"></div>
+        </div>
+      `;
+      catStatsContainer.appendChild(row);
+      
+      // Smooth progress fill trigger
+      setTimeout(() => {
+        const bar = row.querySelector('.category-progress-bar');
+        if (bar) bar.style.width = `${percentage}%`;
+      }, 100);
+    });
+  }
+
+  // Render Event stats (unsettled per event)
+  const eventStatsContainer = document.getElementById('event-stats');
+  eventStatsContainer.innerHTML = '';
+  
+  if (unsettled.length === 0) {
+    eventStatsContainer.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🎉</div>
+        <p style="font-size: 14px;">立替データはありません</p>
+      </div>`;
+  } else {
+    const eventSum = {};
+    let maxEventAmount = 0;
     
-    // Smooth progress fill trigger
-    setTimeout(() => {
-      const bar = row.querySelector('.category-progress-bar');
-      if (bar) bar.style.width = `${percentage}%`;
-    }, 100);
-  });
+    unsettled.forEach(e => {
+      const evtId = e.event_id || '';
+      eventSum[evtId] = (eventSum[evtId] || 0) + Number(e.amount);
+      if (eventSum[evtId] > maxEventAmount) maxEventAmount = eventSum[evtId];
+    });
+    
+    Object.keys(eventSum).sort((a,b) => eventSum[b] - eventSum[a]).forEach(evtId => {
+      const amount = eventSum[evtId];
+      const percentage = maxEventAmount > 0 ? (amount / maxEventAmount) * 100 : 0;
+      
+      const evt = state.events.find(ev => ev.id === evtId);
+      const evtName = evt ? evt.name : 'イベント指定なし';
+      const settleEventId = evtId || '_no_event_';
+      
+      const row = document.createElement('div');
+      row.className = 'category-stat-row';
+      row.innerHTML = `
+        <div class="category-stat-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <span>📅 ${evtName}</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-family: var(--font-heading); font-weight: 700; font-size: 14px;">${amount.toLocaleString()}円</span>
+            <button class="btn btn-settle-cat" style="width: auto; padding: 6px 14px; font-size: 11px; border-radius: 20px; background: linear-gradient(135deg, var(--accent-amber), #d97706); color: white; border: none; box-shadow: 0 0 10px rgba(245, 158, 11, 0.45); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;" onclick="openSettlementConfirmModal('', '${settleEventId}')">
+              <span class="material-symbols-outlined" style="font-size: 13px;">price_check</span>
+              精算
+            </button>
+          </div>
+        </div>
+        <div class="category-progress-bg" style="margin-top: 6px;">
+          <div class="category-progress-bar" style="width: 0%; background: linear-gradient(90deg, var(--accent-amber), #d97706);"></div>
+        </div>
+      `;
+      eventStatsContainer.appendChild(row);
+      
+      setTimeout(() => {
+        const bar = row.querySelector('.category-progress-bar');
+        if (bar) bar.style.width = `${percentage}%`;
+      }, 100);
+    });
+  }
 }
 
 function renderExpenseHistory() {
@@ -796,11 +969,9 @@ function renderExpenseHistory() {
     setContainer.style.display = 'none';
     expContainer.innerHTML = '';
     
-    const unsettled = state.expenses
-      .filter(e => e.status === 'unsettled')
-      .sort((a,b) => new Date(b.date) - new Date(a.date) || new Date(b.created_at) - new Date(a.created_at));
-      
-    if (unsettled.length === 0) {
+    const segmentExpenses = state.expenses.filter(e => e.status === 'unsettled');
+    
+    if (segmentExpenses.length === 0) {
       expContainer.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">📄</div>
@@ -809,7 +980,10 @@ function renderExpenseHistory() {
       return;
     }
     
-    unsettled.forEach(e => {
+    const listToRender = segmentExpenses
+      .sort((a,b) => new Date(b.date) - new Date(a.date) || new Date(b.created_at) - new Date(a.created_at));
+      
+    listToRender.forEach(e => {
       const card = document.createElement('div');
       card.className = 'expense-card';
       
@@ -820,6 +994,10 @@ function renderExpenseHistory() {
       const cat = state.categories.find(c => c.id === e.category || c.name === e.category);
       const categoryLabel = cat ? `${cat.emoji} ${cat.name}` : e.category;
       
+      // Find event details
+      const evt = state.events.find(ev => ev.id === e.event_id);
+      const eventBadge = evt ? `<span class="expense-event-tag">@${escapeHTML(evt.name)}</span>` : '';
+
       card.innerHTML = `
         <div class="expense-card-left">
           <div class="payer-avatar" style="background: rgba(${hexToRgb(member.color)}, 0.12); border-color: ${member.color}; color: ${member.color}; font-weight: 700;">
@@ -829,6 +1007,7 @@ function renderExpenseHistory() {
             <div class="expense-title-row">
               <span class="expense-memo">${escapeHTML(e.description) || '立替費用'}</span>
               <span class="expense-category-tag">${escapeHTML(categoryLabel)}</span>
+              ${eventBadge}
             </div>
             <span class="expense-date">${formatDateStr(e.date)}</span>
           </div>
@@ -868,6 +1047,8 @@ function renderExpenseHistory() {
       card.style.cursor = 'default';
       card.style.gap = '8px';
       
+      const settledExpenses = state.expenses.filter(e => e.settlement_id === s.id);
+      
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -901,10 +1082,11 @@ function registerExpense(e) {
   const payer = activeFormPayer;
   
   const categoryOption = document.querySelector('.category-option.active');
-  const category = categoryOption ? (categoryOption.dataset.categoryId || categoryOption.dataset.category) : '';
+  const category = categoryOption ? categoryOption.dataset.categoryId : '';
   
   const date = document.getElementById('input-date').value;
   const description = document.getElementById('input-description').value;
+  const event_id = document.getElementById('input-event').value || '';
   
   if (!amount || !payer || !date) {
     showToast('入力項目を確認してください');
@@ -915,7 +1097,7 @@ function registerExpense(e) {
   submitBtn.disabled = true;
   submitBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 登録中...';
   
-  const expense = { amount, payer, category, date, description };
+  const expense = { amount, payer, category, date, description, event_id };
   
   api.withSuccessHandler(res => {
     submitBtn.disabled = false;
@@ -927,6 +1109,7 @@ function registerExpense(e) {
       // Reset Form fields
       document.getElementById('input-amount').value = '';
       document.getElementById('input-description').value = '';
+      // Event selector keeps its selection or defaults
       document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
       
       // Reload data
@@ -958,7 +1141,12 @@ function openExpenseDetailDrawer(expense) {
   const categoryLabel = cat ? `${cat.emoji} ${cat.name}` : expense.category;
   document.getElementById('detail-category').textContent = categoryLabel;
   
+  const evt = state.events.find(ev => ev.id === expense.event_id);
+  const eventLabel = evt ? (evt.name + (evt.status === 'settled' ? ' (精算済み)' : '')) : '指定なし';
+  document.getElementById('detail-event').textContent = eventLabel;
+  
   document.getElementById('detail-description').textContent = expense.description || '記入なし';
+
   
   toggleModal('expense-modal', true);
 }
@@ -992,16 +1180,25 @@ function confirmDeleteExpense() {
 /**
  * SETTLEMENT CONFIRMATION MODAL
  */
-function openSettlementConfirmModal(category) {
+function openSettlementConfirmModal(category, eventId) {
   categoryToSettle = category || '';
+  eventToSettle = eventId || '';
   
   const unsettled = state.expenses.filter(e => {
     const matchCat = !categoryToSettle || e.category === categoryToSettle;
-    return e.status === 'unsettled' && matchCat;
+    let matchEvt = true;
+    if (eventToSettle) {
+      if (eventToSettle === '_no_event_') {
+        matchEvt = !e.event_id;
+      } else {
+        matchEvt = e.event_id === eventToSettle;
+      }
+    }
+    return e.status === 'unsettled' && matchCat && matchEvt;
   });
   
   if (unsettled.length === 0) {
-    showToast('このカテゴリの未精算データはありません');
+    showToast('未精算のデータはありません');
     return;
   }
   
@@ -1012,11 +1209,18 @@ function openSettlementConfirmModal(category) {
     return `<div style="padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03);">${line}</div>`;
   }).join('');
   
-  // Update Modal Title based on selected category
+  // Update Modal Title based on selected category / event
   let shortTitle = 'すべての出費';
   if (categoryToSettle) {
     const matchedCat = state.categories.find(c => c.id === categoryToSettle || c.name === categoryToSettle);
     if (matchedCat) shortTitle = matchedCat.name;
+  } else if (eventToSettle) {
+    if (eventToSettle === '_no_event_') {
+      shortTitle = 'イベント指定なし';
+    } else {
+      const matchedEvt = state.events.find(ev => ev.id === eventToSettle);
+      if (matchedEvt) shortTitle = matchedEvt.name;
+    }
   }
   document.querySelector('#settle-modal h3').textContent = `精算の確定 (${shortTitle})`;
   
@@ -1054,7 +1258,7 @@ function executeSettlement() {
     settleBtn.disabled = false;
     settleBtn.innerHTML = '<span class="material-symbols-outlined">price_check</span> 確定する';
     showToast('エラーが発生しました: ' + err.message);
-  }).settleExpenses(activeSsId, settlerId, categoryToSettle);
+  }).settleExpenses(activeSsId, settlerId, categoryToSettle, eventToSettle);
 }
 
 /**
@@ -1088,6 +1292,10 @@ function closeCategoryModal(e) {
 
 function closeMemberModal(e) {
   if (e.target.id === 'member-modal') toggleModal('member-modal', false);
+}
+
+function closeEventModal(e) {
+  if (e.target.id === 'event-modal') toggleModal('event-modal', false);
 }
 
 function showToast(message) {
@@ -1393,6 +1601,178 @@ function renderSettingsCategories() {
     `;
     container.appendChild(row);
   });
+}
+
+/**
+ * EVENT MANAGEMENT
+ */
+function renderEventSelectors() {
+  const registerSelect = document.getElementById('input-event');
+  const editSelect = document.getElementById('edit-input-event');
+  if (!registerSelect || !editSelect) return;
+  
+  registerSelect.innerHTML = '';
+  editSelect.innerHTML = '';
+  
+  // Add "指定なし" option for unlinked events
+  const optNoneReg = document.createElement('option');
+  optNoneReg.value = '';
+  optNoneReg.textContent = '指定なし';
+  registerSelect.appendChild(optNoneReg);
+  
+  const optNoneEdit = document.createElement('option');
+  optNoneEdit.value = '';
+  optNoneEdit.textContent = '指定なし';
+  editSelect.appendChild(optNoneEdit);
+  
+  const activeEvents = state.events.filter(e => e.status === 'active');
+  
+  activeEvents.forEach(evt => {
+    const opt = document.createElement('option');
+    opt.value = evt.id;
+    opt.textContent = evt.name;
+    registerSelect.appendChild(opt);
+  });
+  
+  state.events.forEach(evt => {
+    const opt = document.createElement('option');
+    opt.value = evt.id;
+    opt.textContent = evt.name + (evt.status === 'settled' ? ' (精算済み)' : '');
+    editSelect.appendChild(opt);
+  });
+}
+
+function renderSettingsEvents() {
+  const container = document.getElementById('settings-events-list');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (state.events.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding: 12px;"><p>イベントが登録されていません</p></div>';
+    return;
+  }
+  
+  state.events.forEach((evt, index) => {
+    const card = document.createElement('div');
+    card.className = 'expense-card';
+    card.style.cursor = 'default';
+    card.style.padding = '12px 14px';
+    
+    const isSettled = evt.status === 'settled';
+    const statusBadge = isSettled 
+      ? '<span class="badge badge-settled">精算済み</span>'
+      : '<span class="badge badge-active">アクティブ</span>';
+      
+    card.innerHTML = `
+      <div class="expense-card-left" style="gap: 12px; width: 100%;">
+        <div class="payer-avatar" style="background: rgba(245, 158, 11, 0.12); border-color: var(--accent-amber); color: var(--accent-amber); font-weight: 700; flex-shrink: 0; font-size: 16px;">
+          📅
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
+          <div style="font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+            ${escapeHTML(evt.name)}
+            ${statusBadge}
+          </div>
+          <span style="font-size: 10px; color: var(--text-muted);">
+            作成日: ${formatDateStr(evt.created_at || new Date().toISOString())}
+          </span>
+        </div>
+        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+          <button onclick="openEventEditModal(${index})" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-indigo)'; this.style.background='rgba(99,102,241,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+          </button>
+          <button onclick="deleteEvent('${evt.id}')" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.color='var(--accent-rose)'; this.style.background='rgba(244,63,94,0.1)';" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent';">
+            <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function openEventCreateModal() {
+  document.getElementById('event-modal-title').textContent = '新規イベントの追加';
+  document.getElementById('event-edit-id').value = '';
+  document.getElementById('event-input-name').value = '';
+  document.getElementById('event-status-group').style.display = 'none';
+  toggleModal('event-modal', true);
+}
+
+function openEventEditModal(index) {
+  const evt = state.events[index];
+  if (!evt) return;
+  
+  document.getElementById('event-modal-title').textContent = 'イベントの編集';
+  document.getElementById('event-edit-id').value = evt.id;
+  document.getElementById('event-input-name').value = evt.name;
+  
+  const statusGroup = document.getElementById('event-status-group');
+  statusGroup.style.display = 'block';
+  document.getElementById('event-input-status').value = evt.status || 'active';
+  
+  toggleModal('event-modal', true);
+}
+
+function saveEventFromForm() {
+  const id = document.getElementById('event-edit-id').value;
+  const name = document.getElementById('event-input-name').value.trim();
+  const status = document.getElementById('event-input-status').value;
+  
+  if (!name) {
+    showToast('イベント名を入力してください');
+    return;
+  }
+  
+  const saveBtn = document.getElementById('btn-save-event');
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 保存中...';
+  
+  const isNew = !id;
+  const event = { id, name, status };
+  
+  const successHandler = res => {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    toggleModal('event-modal', false);
+    
+    if (res && res.success) {
+      showToast(isNew ? '新規イベントを追加しました！' : 'イベント情報を更新しました！');
+      loadApplicationData();
+    } else {
+      showToast('エラーが発生しました: ' + (res ? res.error : 'レスポンスが空です'));
+    }
+  };
+  
+  const failureHandler = err => {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<span class="material-symbols-outlined">save</span> 保存する';
+    showToast('エラー: ' + err.message);
+  };
+  
+  if (isNew) {
+    api.withSuccessHandler(successHandler).withFailureHandler(failureHandler).addEvent(activeSsId, event);
+  } else {
+    api.withSuccessHandler(successHandler).withFailureHandler(failureHandler).updateEvent(activeSsId, event);
+  }
+}
+
+function deleteEvent(id) {
+
+  
+  if (!confirm('このイベントを削除しますか？\n（立替費用が登録されているイベントは削除できません）')) return;
+  
+  showToast('イベントを削除中...');
+  api.withSuccessHandler(res => {
+    if (res && res.success) {
+      showToast('イベントを削除しました');
+      loadApplicationData();
+    } else {
+      showToast('削除できません: ' + (res ? res.error : 'レスポンスが空です'));
+    }
+  }).withFailureHandler(err => {
+    showToast('エラー: ' + err.message);
+  }).deleteEvent(activeSsId, id);
 }
 
 function deleteCategory(id) {
@@ -1731,6 +2111,7 @@ function openExpenseEditModalFromDetail() {
   document.getElementById('edit-input-amount').value = expense.amount;
   document.getElementById('edit-input-date').value = expense.date.split('T')[0]; // Ensure correct formatting for input type=date
   document.getElementById('edit-input-description').value = expense.description || '';
+  document.getElementById('edit-input-event').value = expense.event_id || '';
   
   editFormPayer = expense.payer;
   renderEditPayerSelectorGrid();
@@ -1746,10 +2127,11 @@ function saveExpenseEdit() {
   const payer = editFormPayer;
   
   const categoryOption = document.querySelector('#edit-category-grid .category-option.active');
-  const category = categoryOption ? (categoryOption.dataset.categoryId || categoryOption.dataset.category) : '';
+  const category = categoryOption ? categoryOption.dataset.categoryId : '';
   
   const date = document.getElementById('edit-input-date').value;
   const description = document.getElementById('edit-input-description').value;
+  const event_id = document.getElementById('edit-input-event').value || '';
   
   if (!amount || !payer || !date) {
     showToast('入力項目を確認してください');
@@ -1760,7 +2142,7 @@ function saveExpenseEdit() {
   saveBtn.disabled = true;
   saveBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> 保存中...';
   
-  const expense = { id, amount, payer, category, date, description };
+  const expense = { id, amount, payer, category, date, description, event_id };
   
   api.withSuccessHandler(res => {
     saveBtn.disabled = false;

@@ -8,7 +8,8 @@ var SHEETS = {
   EXPENSES: 'expenses',
   SETTLEMENTS: 'settlements',
   MEMBERS: 'members',
-  CATEGORIES: 'categories'
+  CATEGORIES: 'categories',
+  EVENTS: 'events'
 };
 
 /**
@@ -195,7 +196,15 @@ function initializeDatabase(spreadsheetId) {
   var expenseSheet = ss.getSheetByName(SHEETS.EXPENSES);
   if (!expenseSheet) {
     expenseSheet = ss.insertSheet(SHEETS.EXPENSES);
-    expenseSheet.appendRow(['id', 'date', 'payer', 'amount', 'category', 'description', 'status', 'settlement_id', 'created_at']);
+    expenseSheet.appendRow(['id', 'date', 'payer', 'amount', 'category', 'description', 'status', 'settlement_id', 'created_at', 'event_id']);
+  } else {
+    var headers = expenseSheet.getRange(1, 1, 1, expenseSheet.getLastColumn()).getValues()[0];
+    
+    // Add missing event_id column header if it doesn't exist (Self-healing migration)
+    if (headers.indexOf('event_id') === -1) {
+      var colIdx = expenseSheet.getLastColumn() + 1;
+      expenseSheet.getRange(1, colIdx).setValue('event_id');
+    }
   }
   
   // 4. Settlements sheet
@@ -203,6 +212,13 @@ function initializeDatabase(spreadsheetId) {
   if (!settlementSheet) {
     settlementSheet = ss.insertSheet(SHEETS.SETTLEMENTS);
     settlementSheet.appendRow(['id', 'date', 'settler', 'total_amount', 'details', 'created_at']);
+  }
+
+  // 5. Events sheet
+  var eventSheet = ss.getSheetByName(SHEETS.EVENTS);
+  if (!eventSheet) {
+    eventSheet = ss.insertSheet(SHEETS.EVENTS);
+    eventSheet.appendRow(['id', 'name', 'status', 'created_at']);
   }
   
   return { success: true, message: 'Database initialized successfully.' };
@@ -294,6 +310,7 @@ function getInitialData(spreadsheetId) {
       settlements: getSheetData(spreadsheetId, SHEETS.SETTLEMENTS),
       members: members,
       categories: getSheetData(spreadsheetId, SHEETS.CATEGORIES),
+      events: getSheetData(spreadsheetId, SHEETS.EVENTS),
       spreadsheetUrl: ss.getUrl(),
       spreadsheetName: ss.getName()
     };
@@ -329,7 +346,8 @@ function addExpense(spreadsheetId, expense) {
       sanitizeTextInput(expense.description || ''),
       'unsettled',
       '',
-      createdAt
+      createdAt,
+      expense.event_id || ''
     ]);
     
     return { success: true, expenseId: id };
@@ -343,6 +361,7 @@ function addExpense(spreadsheetId, expense) {
  */
 function deleteExpense(spreadsheetId, id) {
   try {
+    if (!id) throw new Error('立替IDが指定されていません。');
     var ss = getSpreadsheet(spreadsheetId);
     var sheet = ss.getSheetByName(SHEETS.EXPENSES);
     if (!sheet) throw new Error('Expenses sheet does not exist.');
@@ -383,6 +402,7 @@ function updateExpense(spreadsheetId, expense) {
     var categoryCol = headers.indexOf('category');
     var descriptionCol = headers.indexOf('description');
     var statusCol = headers.indexOf('status');
+    var eventIdCol = headers.indexOf('event_id');
     
     if (idCol === -1) throw new Error('ID column not found.');
     
@@ -406,6 +426,7 @@ function updateExpense(spreadsheetId, expense) {
     if (amountCol !== -1) sheet.getRange(foundRow, amountCol + 1).setValue(Number(expense.amount));
     if (categoryCol !== -1) sheet.getRange(foundRow, categoryCol + 1).setValue(expense.category);
     if (descriptionCol !== -1) sheet.getRange(foundRow, descriptionCol + 1).setValue(sanitizeTextInput(expense.description || ''));
+    if (eventIdCol !== -1) sheet.getRange(foundRow, eventIdCol + 1).setValue(expense.event_id || '');
     
     return { success: true };
   } catch (err) {
@@ -417,7 +438,7 @@ function updateExpense(spreadsheetId, expense) {
 /**
  * Perform Settlement pairing and mark expenses as settled.
  */
-function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
+function settleExpenses(spreadsheetId, settlerName, categoryIdOrName, eventId) {
   try {
     var ss = getSpreadsheet(spreadsheetId);
     var expenseSheet = ss.getSheetByName(SHEETS.EXPENSES);
@@ -438,7 +459,15 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
       if (categoryIdOrName) {
         matchCat = (e.category === categoryIdOrName);
       }
-      return e.status === 'unsettled' && matchCat;
+      var matchEvent = true;
+      if (eventId) {
+        if (eventId === '_no_event_') {
+          matchEvent = (!e.event_id);
+        } else {
+          matchEvent = (e.event_id === eventId);
+        }
+      }
+      return e.status === 'unsettled' && matchCat && matchEvent;
     });
     
     if (unsettled.length === 0) {
@@ -585,6 +614,39 @@ function settleExpenses(spreadsheetId, settlerName, categoryIdOrName) {
       }
     }
     
+    // Update event statuses to settled
+    var eventsToMarkSettled = [];
+    if (eventId) {
+      if (eventId !== '_no_event_') {
+        eventsToMarkSettled.push(eventId);
+      }
+    } else if (!categoryIdOrName) {
+      // Global settlement: get all unique event IDs from the settled expenses
+      var uniqueEvtIds = {};
+      unsettled.forEach(function(e) {
+        if (e.event_id) {
+          uniqueEvtIds[e.event_id] = true;
+        }
+      });
+      eventsToMarkSettled = Object.keys(uniqueEvtIds);
+    }
+    
+    if (eventsToMarkSettled.length > 0) {
+      var eventSheet = ss.getSheetByName(SHEETS.EVENTS);
+      if (eventSheet) {
+        var evtValues = eventSheet.getDataRange().getValues();
+        var evtIdIdx = evtValues[0].indexOf('id');
+        var evtStatusIdx = evtValues[0].indexOf('status');
+        
+        for (var i = 1; i < evtValues.length; i++) {
+          var eId = evtValues[i][evtIdIdx];
+          if (eventsToMarkSettled.indexOf(eId) !== -1) {
+            eventSheet.getRange(i + 1, evtStatusIdx + 1).setValue('settled');
+          }
+        }
+      }
+    }
+    
     return {
       success: true,
       settlement: {
@@ -653,6 +715,7 @@ function saveCategory(spreadsheetId, category) {
  */
 function deleteCategory(spreadsheetId, id) {
   try {
+    if (!id) throw new Error('カテゴリIDが指定されていません。');
     var ss = getSpreadsheet(spreadsheetId);
     var sheet = ss.getSheetByName(SHEETS.CATEGORIES);
     if (!sheet) throw new Error('Categories sheet does not exist.');
@@ -722,6 +785,104 @@ function createNewSpreadsheet(name) {
       success: false,
       error: "スプレッドシートの新規作成に失敗しました。\nエラー: " + err.message
     };
+  }
+}
+
+/**
+ * Event APIs
+ */
+function addEvent(spreadsheetId, event) {
+  try {
+    var ss = getSpreadsheet(spreadsheetId);
+    var sheet = ss.getSheetByName(SHEETS.EVENTS);
+    if (!sheet) {
+      initializeDatabase(spreadsheetId);
+      sheet = ss.getSheetByName(SHEETS.EVENTS);
+    }
+    
+    var id = 'evt_' + new Date().getTime() + '_' + Math.random().toString(36).substr(2, 5);
+    var createdAt = new Date().toISOString();
+    
+    sheet.appendRow([
+      id,
+      sanitizeTextInput(event.name),
+      'active',
+      createdAt
+    ]);
+    
+    return { success: true, eventId: id };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function updateEvent(spreadsheetId, event) {
+  try {
+    var ss = getSpreadsheet(spreadsheetId);
+    var sheet = ss.getSheetByName(SHEETS.EVENTS);
+    if (!sheet) throw new Error('Events sheet does not exist.');
+    
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0];
+    
+    var idCol = headers.indexOf('id');
+    var nameCol = headers.indexOf('name');
+    var statusCol = headers.indexOf('status');
+    
+    if (idCol === -1) throw new Error('ID column not found.');
+    
+    var foundRow = -1;
+    for (var i = 1; i < values.length; i++) {
+      if (values[i][idCol] === event.id) {
+        foundRow = i + 1;
+        break;
+      }
+    }
+    
+    if (foundRow === -1) throw new Error('イベントが見つかりませんでした。');
+    
+    if (nameCol !== -1) sheet.getRange(foundRow, nameCol + 1).setValue(sanitizeTextInput(event.name));
+    if (statusCol !== -1) sheet.getRange(foundRow, statusCol + 1).setValue(event.status);
+    
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function deleteEvent(spreadsheetId, id) {
+  try {
+    if (!id) throw new Error('イベントIDが指定されていません。');
+    var ss = getSpreadsheet(spreadsheetId);
+    var expenseSheet = ss.getSheetByName(SHEETS.EXPENSES);
+    if (expenseSheet) {
+      var expValues = expenseSheet.getDataRange().getValues();
+      var eventIdIdx = expValues[0].indexOf('event_id');
+      if (eventIdIdx !== -1) {
+        for (var i = 1; i < expValues.length; i++) {
+          if (expValues[i][eventIdIdx] === id) {
+            throw new Error('このイベントには立替費用が登録されているため削除できません。');
+          }
+        }
+      }
+    }
+    
+    var sheet = ss.getSheetByName(SHEETS.EVENTS);
+    if (!sheet) throw new Error('Events sheet does not exist.');
+    
+    var values = sheet.getDataRange().getValues();
+    var idCol = values[0].indexOf('id');
+    if (idCol === -1) throw new Error('ID column not found.');
+    
+    for (var i = 1; i < values.length; i++) {
+      if (values[i][idCol] === id) {
+        sheet.deleteRow(i + 1);
+        return { success: true };
+      }
+    }
+    throw new Error('イベントが見つかりませんでした。');
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 }
 

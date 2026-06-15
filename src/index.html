@@ -53,8 +53,8 @@
       <!-- Tab 1: Create New Sheet (NEW) -->
       <div id="onboard-tab-new">
         <div class="form-group" style="margin-bottom: 20px;">
-          <label class="form-label" style="text-align: left;">イベント名（スプレッドシートのファイル名になります）</label>
-          <input type="text" id="onboarding-name-input" class="form-input" placeholder="例：卒業旅行の割り勘、週末バーベキュー" style="font-size: 13px;">
+          <label class="form-label" style="text-align: left;">ファイル名</label>
+          <input type="text" id="onboarding-name-input" class="form-input" placeholder="例：〇〇グループの割り勘、2026年立替管理" style="font-size: 13px;">
         </div>
         <button id="btn-create-sheet-onboarding" class="btn btn-primary" onclick="createNewSheetFromOnboarding()" style="height: 50px;">
           <span class="material-symbols-outlined">rocket_launch</span>
@@ -135,6 +135,20 @@
           </div>
         </div>
       </div>
+
+      <!-- Event Breakdown Card -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-amber);">event_note</span>
+          イベント別支出 (未精算)
+        </h3>
+        <div id="event-stats" class="category-stats-list">
+          <div class="empty-state">
+            <div class="empty-state-icon">🎉</div>
+            <p>未精算のイベントはありません。</p>
+          </div>
+        </div>
+      </div>
     </main>
 
     <!-- TAB 2: REGISTER EXPENSE FORM -->
@@ -169,6 +183,15 @@
             </div>
           </div>
 
+          <!-- Event Selector -->
+          <div class="form-group">
+            <label class="form-label">イベント</label>
+            <div style="display: flex; gap: 8px;">
+              <select id="input-event" class="form-input" style="flex: 1; min-height: 48px; font-size: 1rem; color: white; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0 12px; cursor: pointer;"></select>
+              <button type="button" class="btn btn-secondary" onclick="openEventCreateModal()" style="width: auto; padding: 0 16px; height: 48px; flex-shrink: 0;">新規作成</button>
+            </div>
+          </div>
+
           <!-- Date Selector -->
           <div class="form-group">
             <label class="form-label">日付</label>
@@ -180,6 +203,8 @@
             <label class="form-label">メモ (用途、店名など)</label>
             <input type="text" id="input-description" class="form-input" placeholder="居酒屋、タクシー、スーパー等">
           </div>
+
+
 
           <button type="submit" id="btn-submit-expense" class="btn btn-primary" style="margin-top: 10px;">
             <span class="material-symbols-outlined">add_task</span>
@@ -196,6 +221,8 @@
         <button id="seg-unsettled" class="segment-btn active" onclick="switchHistorySegment('unsettled')">未精算</button>
         <button id="seg-settled" class="segment-btn" onclick="switchHistorySegment('settled')">精算済履歴</button>
       </div>
+
+
 
       <!-- Expense List Container -->
       <div id="expense-list-container" class="expense-list">
@@ -247,6 +274,26 @@
         <button onclick="openCategoryCreateModal();" class="btn btn-secondary" style="width: 100%; height: 46px;">
           <span class="material-symbols-outlined" style="font-size: 18px;">add_circle</span>
           新規カテゴリを追加する
+        </button>
+      </div>
+
+      <!-- Event Settings Card -->
+      <div class="glass-card">
+        <h3 style="font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="color: var(--accent-amber);">event_note</span>
+          イベント管理
+        </h3>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
+          イベントを作成・管理します。精算が完了したイベントは、立替の新規登録画面の選択肢から自動的に非表示になります。
+        </p>
+        
+        <div id="settings-events-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+          <!-- Dynamically filled by JS -->
+        </div>
+        
+        <button onclick="openEventCreateModal();" class="btn btn-secondary" style="width: 100%; height: 46px;">
+          <span class="material-symbols-outlined" style="font-size: 18px;">event_note</span>
+          新規イベントを追加する
         </button>
       </div>
 
@@ -355,9 +402,14 @@
           <span id="detail-amount" class="detail-val" style="font-size: 18px; color: var(--accent-indigo); font-family: var(--font-heading);">-</span>
         </div>
         <div class="detail-item">
+          <span class="detail-label">イベント</span>
+          <span id="detail-event" class="detail-val">-</span>
+        </div>
+        <div class="detail-item">
           <span class="detail-label">カテゴリ</span>
           <span id="detail-category" class="detail-val">-</span>
         </div>
+
         <div class="detail-item" style="border-bottom: none;">
           <span class="detail-label">メモ</span>
           <span id="detail-description" class="detail-val">-</span>
@@ -416,6 +468,12 @@
           </div>
         </div>
 
+        <!-- Event Selector -->
+        <div class="form-group">
+          <label class="form-label">イベント</label>
+          <select id="edit-input-event" class="form-input" style="min-height: 48px; font-size: 1rem; color: white; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0 12px; cursor: pointer;"></select>
+        </div>
+
         <!-- Date Selector -->
         <div class="form-group">
           <label class="form-label">日付</label>
@@ -427,6 +485,8 @@
           <label class="form-label">メモ (用途、店名など)</label>
           <input type="text" id="edit-input-description" class="form-input" placeholder="居酒屋、タクシー、スーパー等">
         </div>
+
+
 
         <div class="modal-buttons" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 20px;">
           <button type="button" class="btn btn-secondary" onclick="toggleModal('expense-edit-modal', false)">キャンセル</button>
@@ -549,6 +609,43 @@
         <div class="modal-buttons" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 20px;">
           <button type="button" class="btn btn-secondary" onclick="toggleModal('member-modal', false)">キャンセル</button>
           <button type="submit" id="btn-save-member" class="btn btn-primary">
+            <span class="material-symbols-outlined">save</span>
+            保存する
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EVENT EDITOR -->
+  <div id="event-modal" class="modal-overlay" onclick="closeEventModal(event)">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="event-modal-title">イベントの設定</h3>
+        <button class="modal-close" onclick="toggleModal('event-modal', false)">×</button>
+      </div>
+      
+      <form id="event-form" onsubmit="event.preventDefault(); saveEventFromForm();">
+        <input type="hidden" id="event-edit-id">
+        
+        <!-- Event Name -->
+        <div class="form-group">
+          <label class="form-label">イベント名</label>
+          <input type="text" id="event-input-name" class="form-input" placeholder="例：2026年3月旅行" required>
+        </div>
+        
+        <!-- Event Status (Only shown when editing) -->
+        <div class="form-group" id="event-status-group" style="display: none;">
+          <label class="form-label">ステータス</label>
+          <select id="event-input-status" class="form-input" style="color: white; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; min-height: 48px; font-size: 1rem; padding: 0 12px; cursor: pointer;">
+            <option value="active">アクティブ (新規登録可能)</option>
+            <option value="settled">精算済み (選択肢から非表示)</option>
+          </select>
+        </div>
+        
+        <div class="modal-buttons" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('event-modal', false)">キャンセル</button>
+          <button type="submit" id="btn-save-event" class="btn btn-primary">
             <span class="material-symbols-outlined">save</span>
             保存する
           </button>
